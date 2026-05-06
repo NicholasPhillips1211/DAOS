@@ -1,0 +1,42 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import api_router
+from app.core.config import settings
+from app.core.database import Base, engine
+from app.core.security import SecurityHeadersMiddleware
+from app import models  # noqa: F401
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Create the database schema on startup and keep shutdown minimal.
+
+    The application is metadata-driven, so startup prepares tables before any
+    request handlers run and avoids extra shutdown work for the MVP.
+    """
+
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+if settings.enforce_security_headers:
+    app.add_middleware(SecurityHeadersMiddleware)
+app.include_router(api_router, prefix=settings.api_prefix)
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    """Return a small health-style payload for quick runtime verification."""
+
+    return {"name": settings.app_name, "environment": settings.environment}

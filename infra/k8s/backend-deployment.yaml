@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daos-backend
+  labels:
+    app: daos-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daos-backend
+  template:
+    metadata:
+      labels:
+        app: daos-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/example/daos-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://daos:daos@postgres:5432/daos
+            - name: CORS_ORIGINS
+              value: '["http://localhost:5173"]'
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daos-backend
+spec:
+  selector:
+    app: daos-backend
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
