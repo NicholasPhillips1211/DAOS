@@ -1,21 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
+from app.core.dependencies import get_db, get_or_404
 from app.models.metadata import Workspace, WorkspaceMembership
 from app.schemas.workspace import MembershipCreate, MembershipRead, WorkspaceCreate, WorkspaceRead
 
 router = APIRouter()
-
-
-def get_db() -> Session:
-    """Yield a short-lived database session for request-scoped operations."""
-
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("", response_model=list[WorkspaceRead])
@@ -40,9 +30,7 @@ def create_workspace(payload: WorkspaceCreate, db: Session = Depends(get_db)) ->
 def add_member(workspace_id: int, payload: MembershipCreate, db: Session = Depends(get_db)) -> WorkspaceMembership:
     """Attach a user to a workspace with a role used by downstream RBAC checks."""
 
-    workspace = db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    get_or_404(db, Workspace, workspace_id)
     membership = WorkspaceMembership(workspace_id=workspace_id, user_email=payload.user_email, role=payload.role)
     db.add(membership)
     db.commit()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db
 from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
 from app.services.lakehouse_service import LakehouseService

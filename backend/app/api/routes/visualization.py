@@ -3,7 +3,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db
 from app.models.metadata import Dataset, Workspace
 from app.models.visualization import Dashboard
 from app.schemas.visualization import (

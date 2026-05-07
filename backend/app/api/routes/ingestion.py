@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db, get_or_404
 from app.models.ingestion import DataQualityReport, IngestionJob
 from app.models.metadata import Dataset, DatasetState, Workspace
 from app.schemas.ingestion import IngestionUploadRead
@@ -21,9 +21,7 @@ async def upload_dataset(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> IngestionUploadRead:
-    workspace = db.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    get_or_404(db, Workspace, workspace_id)
 
     source_name = file.filename or dataset_name
     if not source_name.lower().endswith(".csv"):

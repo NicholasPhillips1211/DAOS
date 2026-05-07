@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db, get_or_404
 from app.models.metadata import Dataset, Workspace
 from app.schemas.dataset import DatasetCreate, DatasetRead
 
@@ -19,9 +19,7 @@ def list_datasets(db: Session = Depends(get_db)) -> list[Dataset]:
 def create_dataset(payload: DatasetCreate, db: Session = Depends(get_db)) -> Dataset:
     """Register a dataset record once its source and storage path are known."""
 
-    workspace = db.get(Workspace, payload.workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    get_or_404(db, Workspace, payload.workspace_id)
     dataset = Dataset(
         workspace_id=payload.workspace_id,
         name=payload.name,

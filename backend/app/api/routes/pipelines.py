@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db, get_or_404
 from app.core.auth import Principal, get_current_principal, require_workspace_role
 from app.core.config import settings
 from app.models.metadata import Workspace
@@ -30,9 +30,7 @@ def list_pipelines(db: Session = Depends(get_db), principal: Principal = Depends
 def create_pipeline(payload: PipelineCreate, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> Pipeline:
     """Create a new pipeline record so the orchestration layer has a home."""
 
-    workspace = db.get(Workspace, payload.workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    get_or_404(db, Workspace, payload.workspace_id)
     require_workspace_role(db, payload.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
     pipeline = Pipeline(workspace_id=payload.workspace_id, name=payload.name, description=payload.description)
     db.add(pipeline)
@@ -45,9 +43,7 @@ def create_pipeline(payload: PipelineCreate, db: Session = Depends(get_db), prin
 def schedule_pipeline(pipeline_id: int, payload: PipelineScheduleUpdate, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> Pipeline:
     """Persist a schedule expression so the pipeline can run on a cadence."""
 
-    pipeline = db.get(Pipeline, pipeline_id)
-    if pipeline is None:
-        raise HTTPException(status_code=404, detail="Pipeline not found")
+    pipeline = get_or_404(db, Pipeline, pipeline_id)
     require_workspace_role(db, pipeline.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
 
     pipeline.schedule_cron = payload.schedule_cron
@@ -62,9 +58,7 @@ def schedule_pipeline(pipeline_id: int, payload: PipelineScheduleUpdate, db: Ses
 def create_pipeline_version(pipeline_id: int, payload: PipelineVersionCreate, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> dict[str, int | str]:
     """Store a normalized immutable version of the pipeline definition."""
 
-    pipeline = db.get(Pipeline, pipeline_id)
-    if pipeline is None:
-        raise HTTPException(status_code=404, detail="Pipeline not found")
+    pipeline = get_or_404(db, Pipeline, pipeline_id)
     require_workspace_role(db, pipeline.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
     try:
         normalized_definition = pipeline_service.validate_definition_json(payload.definition_json)

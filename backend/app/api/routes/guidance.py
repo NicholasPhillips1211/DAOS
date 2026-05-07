@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.workspaces import get_db
+from app.core.dependencies import get_db
 from app.core.auth import Principal, get_current_principal, require_workspace_role
 from app.models.guidance import GuidancePlan
 from app.models.metadata import Workspace
