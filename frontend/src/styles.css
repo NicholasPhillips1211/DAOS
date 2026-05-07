@@ -10,6 +10,10 @@ body,
   height: 100%;
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family: 'Space Grotesk', 'Trebuchet MS', ui-sans-serif, sans-serif;
@@ -18,4 +22,12 @@ body {
     radial-gradient(circle at 90% 10%, rgba(251, 191, 36, 0.18), transparent 28%),
     radial-gradient(circle at 40% 100%, rgba(16, 185, 129, 0.2), transparent 30%),
     #020617;
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #ffffff;
 }

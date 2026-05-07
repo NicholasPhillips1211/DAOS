@@ -7,6 +7,7 @@ from app.models.visualization import Dashboard
 from app.models.collaboration import Comment, Share
 from app.models.governance import AuditEvent, DataMask
 from app.models.business import BusinessTranslation
+from app.models.automation import AutomationPlan
 from app.models.recommendation import Recommendation
 from app.models.guidance import GuidancePlan
 
@@ -30,6 +31,7 @@ __all__ = [
     "AuditEvent",
     "DataMask",
     "BusinessTranslation",
+    "AutomationPlan",
     "Recommendation",
     "GuidancePlan",
 ]

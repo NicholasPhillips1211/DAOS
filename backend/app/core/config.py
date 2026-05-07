@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     enforce_security_headers: bool = True
     auth_enabled: bool = False
     api_keys_csv: str = ""
+    llm_base_url: str = "http://localhost:1234/v1"
+    llm_model: str = "local-model"
+    llm_api_key: str = ""
+    llm_timeout_seconds: float = 30.0
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

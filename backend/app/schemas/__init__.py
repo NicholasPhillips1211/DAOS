@@ -1,5 +1,6 @@
 from app.schemas.ingestion import IngestionUploadRead
 from app.schemas.analysis import ColumnStatistic, DatasetStatisticsRead, InsightCreate, InsightRead
+from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
 from app.schemas.ml import FeatureImportanceRead, ModelTrainRequest, ModelTrainResponse
@@ -20,6 +21,8 @@ __all__ = [
     "FeatureImportanceRead",
     "ModelTrainRequest",
     "ModelTrainResponse",
+    "AutomationGenerateRequest",
+    "AutomationPlanRead",
     "ChartRecommendationRead",
     "ChartRecommendationRequest",
     "DashboardCreate",

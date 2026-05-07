@@ -35,6 +35,26 @@ cd frontend
 npm run build
 ```
 
+## Automation and Local LLMs
+
+DAOS can generate automation plans with a local OpenAI-compatible model server such as LM Studio.
+
+Set these backend environment variables when you want the app to call a local model:
+
+```bash
+LLM_BASE_URL=http://localhost:1234/v1
+LLM_MODEL=local-model
+LLM_API_KEY=
+```
+
+The automation endpoint is:
+
+```bash
+POST /api/v1/automation/generate
+```
+
+If the model server is unavailable, the backend falls back to a deterministic plan based on workspace signals, so the feature still works offline.
+
 ## Local Docker Compose
 
 ```bash
