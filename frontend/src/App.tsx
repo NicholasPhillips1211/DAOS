@@ -1,4 +1,8 @@
 import { FormEvent, useMemo, useState } from 'react';
+import { HomeView } from './HomeView';
+import { GuidedTour } from './GuidedTour';
+import { Tooltip } from './Tooltip';
+import { useGuidedTour } from './useGuidedTour';
 
 type DashboardRecord = {
   id: number;
@@ -67,6 +71,8 @@ function parseAutomationPayload(value: string): AutomationPlanPayload | null {
 }
 
 export default function App() {
+  const [showWorkspace, setShowWorkspace] = useState(false);
+  const tour = useGuidedTour();
   const [workspaceId, setWorkspaceId] = useState('1');
   const [dashboardName, setDashboardName] = useState('Executive Overview');
   const [dashboardDescription, setDashboardDescription] = useState('Weekly KPI summary for leadership');
@@ -273,7 +279,17 @@ export default function App() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden text-slate-100">
+    <>
+      {!showWorkspace ? (
+        <HomeView
+          onStartTour={() => {
+            setShowWorkspace(true);
+            tour.startTour();
+          }}
+          onEnterWorkspace={() => setShowWorkspace(true)}
+        />
+      ) : (
+        <main className="relative min-h-screen overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-[-8rem] top-[-8rem] h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="absolute right-[-5rem] top-20 h-80 w-80 rounded-full bg-amber-300/15 blur-3xl" />
@@ -283,20 +299,30 @@ export default function App() {
       <section className="relative mx-auto w-full max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
         <header className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-6 shadow-[0_30px_120px_rgba(0,0,0,0.35)] backdrop-blur-xl">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-4xl">
-              <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/90">DAOS Control Room</p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-                Operate dashboards, automation, and local AI from one workspace.
-              </h1>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300 md:text-lg">
-                Create dashboards, capture collaboration, and generate automation plans backed by a local LM Studio-compatible model or a deterministic fallback when no model server is available.
-              </p>
+            <div className="flex items-start gap-4">
+              <Tooltip content="Go back to home page">
+                <button
+                  onClick={() => setShowWorkspace(false)}
+                  className="mt-2 text-sm text-slate-400 hover:text-cyan-300 transition font-medium"
+                >
+                  ← Back to Home
+                </button>
+              </Tooltip>
+              <div className="max-w-4xl">
+                <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/90">DAOS Control Room</p>
+                <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+                  Operate dashboards, automation, and local AI from one workspace.
+                </h1>
+                <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300 md:text-lg">
+                  Create dashboards, capture collaboration, and generate automation plans backed by a local LM Studio-compatible model or a deterministic fallback when no model server is available.
+                </p>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">FastAPI control plane</span>
-                <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">React analyst UI</span>
-                <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">LM Studio ready</span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">Workspace #{workspaceId}</span>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">FastAPI control plane</span>
+                  <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">React analyst UI</span>
+                  <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">LM Studio ready</span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">Workspace #{workspaceId}</span>
+                </div>
               </div>
             </div>
 
@@ -358,13 +384,15 @@ export default function App() {
                 placeholder="Describe what you want the workspace to automate"
               />
               <div className="flex flex-wrap gap-3">
-                <button
-                  type="submit"
-                  disabled={automationLoading}
-                  className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {automationLoading ? 'Generating...' : 'Generate automation plan'}
-                </button>
+                <Tooltip content="Create an AI-powered automation plan for your workspace">
+                  <button
+                    type="submit"
+                    disabled={automationLoading}
+                    className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {automationLoading ? 'Generating...' : 'Generate automation plan'}
+                  </button>
+                </Tooltip>
                 <span className="self-center text-sm text-slate-400">
                   Local AI support is controlled by the backend `LLM_*` settings.
                 </span>
@@ -476,13 +504,15 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={executeAutomation}
-                      disabled={automationExecuting || latestAutomationPlan.execution_status === 'completed'}
-                      className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70 w-full"
-                    >
-                      {automationExecuting ? 'Executing...' : latestAutomationPlan.execution_status === 'completed' ? 'Already executed' : 'Execute plan now'}
-                    </button>
+                    <Tooltip content="Run this automation plan immediately in your workspace">
+                      <button
+                        onClick={executeAutomation}
+                        disabled={automationExecuting || latestAutomationPlan.execution_status === 'completed'}
+                        className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70 w-full"
+                      >
+                        {automationExecuting ? 'Executing...' : latestAutomationPlan.execution_status === 'completed' ? 'Already executed' : 'Execute plan now'}
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -536,13 +566,15 @@ export default function App() {
                   className={`${inputClass} min-h-24 resize-y`}
                   placeholder="Dashboard description"
                 />
-                <button
-                  type="submit"
-                  disabled={dashboardLoading}
-                  className="rounded-full bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {dashboardLoading ? 'Creating...' : 'Create dashboard'}
-                </button>
+                <Tooltip content="Save this dashboard configuration to your workspace">
+                  <button
+                    type="submit"
+                    disabled={dashboardLoading}
+                    className="rounded-full bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {dashboardLoading ? 'Creating...' : 'Create dashboard'}
+                  </button>
+                </Tooltip>
               </form>
               <ul className="mt-5 space-y-2 text-sm text-slate-200">
                 {dashboards.length === 0 ? <li className="text-slate-400">No dashboards yet.</li> : null}
@@ -567,13 +599,15 @@ export default function App() {
                     className={`${inputClass} min-h-24 resize-y`}
                     placeholder="Comment message"
                   />
-                  <button
-                    type="submit"
-                    disabled={commentLoading}
-                    className="rounded-full bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {commentLoading ? 'Posting...' : 'Post comment'}
-                  </button>
+                  <Tooltip content="Add a comment to foster team collaboration on dashboards">
+                    <button
+                      type="submit"
+                      disabled={commentLoading}
+                      className="rounded-full bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {commentLoading ? 'Posting...' : 'Post comment'}
+                    </button>
+                  </Tooltip>
                 </form>
 
                 <form className="space-y-3" onSubmit={createShare}>
@@ -582,13 +616,15 @@ export default function App() {
                     <option value="view">view</option>
                     <option value="edit">edit</option>
                   </select>
-                  <button
-                    type="submit"
-                    disabled={shareLoading}
-                    className="rounded-full bg-amber-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {shareLoading ? 'Sharing...' : 'Share dashboard'}
-                  </button>
+                  <Tooltip content="Share this dashboard with a team member">
+                    <button
+                      type="submit"
+                      disabled={shareLoading}
+                      className="rounded-full bg-amber-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {shareLoading ? 'Sharing...' : 'Share dashboard'}
+                    </button>
+                  </Tooltip>
                 </form>
               </div>
 
@@ -650,5 +686,17 @@ export default function App() {
         </footer>
       </section>
     </main>
+      )}
+
+      <GuidedTour
+        isActive={tour.isTourActive}
+        currentStep={tour.currentStep}
+        currentStepIndex={tour.currentStepIndex}
+        totalSteps={tour.totalSteps}
+        onNext={tour.nextStep}
+        onPrev={tour.prevStep}
+        onSkip={tour.skipTour}
+      />
+    </>
   );
 }
