@@ -491,6 +491,7 @@ export default function App() {
             <IngestionWizard
               apiBase={apiBase}
               workspaceId={workspaceIdNumber || 1}
+              userEmail={commentEmail}
               onPrepareDashboard={prepareDashboardFromDataset}
               onStatusChange={setStatus}
               onPreviewDashboardFromQuery={previewDashboardFromQueryBlueprint}

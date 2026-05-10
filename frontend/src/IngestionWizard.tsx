@@ -27,6 +27,7 @@ type IngestionUploadRead = {
 type IngestionWizardProps = {
   apiBase: string;
   workspaceId: number;
+  userEmail: string;
   onPrepareDashboard?: (datasetName: string) => void;
   onStatusChange?: (message: string) => void;
   onPreviewDashboardFromQuery?: (payload: {
@@ -113,6 +114,7 @@ LIMIT 25;`;
 export function IngestionWizard({
   apiBase,
   workspaceId,
+  userEmail,
   onPrepareDashboard,
   onStatusChange,
   onPreviewDashboardFromQuery,
@@ -149,7 +151,9 @@ export function IngestionWizard({
     async function loadDatasets(): Promise<void> {
       setLoadingDatasets(true);
       try {
-        const response = await fetch(`${apiBase}/datasets`);
+        const response = await fetch(`${apiBase}/datasets`, {
+          headers: { 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
+        });
         if (!response.ok) {
           throw new Error(`Dataset list failed (${response.status})`);
         }
@@ -225,6 +229,7 @@ export function IngestionWizard({
 
       const response = await fetch(`${apiBase}/ingestion/upload`, {
         method: 'POST',
+        headers: { 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
         body: formData,
       });
 
@@ -272,7 +277,7 @@ export function IngestionWizard({
     try {
       const response = await fetch(`${apiBase}/datasets/${activeDatasetId}/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
         body: JSON.stringify({ sql: querySql }),
       });
 
