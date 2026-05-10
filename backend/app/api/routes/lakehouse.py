@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
 from app.services.audit_service import AuditService
 from app.services.lakehouse_service import LakehouseService
+from app.services.workspace_workflow_service import WorkspaceWorkflowService
 
 router = APIRouter()
 lakehouse_service = LakehouseService()
+workspace_workflow_service = WorkspaceWorkflowService(lakehouse_service)
 audit_service = AuditService()
 
 
@@ -21,21 +22,7 @@ def query_dataset(
 ) -> DatasetQueryResponse:
     """Execute SQL against a dataset file through the lightweight lakehouse layer."""
 
-    if not payload.sql.strip():
-        raise HTTPException(status_code=400, detail="SQL query is required")
-
-    dataset = db.get(Dataset, dataset_id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    if not dataset.storage_path:
-        raise HTTPException(status_code=400, detail="Dataset has no storage path")
-
-    try:
-        columns, rows = lakehouse_service.query_csv(dataset.storage_path, payload.sql)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Dataset file not found") from None
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Query failed: {exc}") from exc
+    dataset, columns, rows = workspace_workflow_service.query_dataset(db, dataset_id, payload.sql)
 
     audit_service.log_event(
         dataset.workspace_id,

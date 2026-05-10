@@ -1,28 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { listWorkspaceDatasets, runDatasetSql, uploadDatasetFile } from './features/ingestion/api';
+import { DashboardDraftPreview, DatasetRecord, IngestionUploadRead, QueryResult } from './types/domain';
 import { WorkflowState } from './WorkflowState';
-
-type DatasetRecord = {
-  id: number;
-  workspace_id: number;
-  name: string;
-  source_type: string;
-  state: string;
-  storage_path?: string | null;
-  created_at: string;
-};
-
-type IngestionUploadRead = {
-  dataset_id: number;
-  workspace_id: number;
-  dataset_name: string;
-  state: string;
-  quality_score: number;
-  row_count: number;
-  rejected_rows: number;
-  storage_path: string;
-  report_id: number;
-  created_at: string;
-};
 
 type IngestionWizardProps = {
   apiBase: string;
@@ -48,22 +27,6 @@ type IngestionWizardProps = {
 type PreviewSummary = {
   headers: string[];
   sampleRows: string[][];
-};
-
-type QueryResult = {
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  row_count: number;
-};
-
-type DashboardDraftPreview = {
-  name: string;
-  description: string;
-  recommendation?: {
-    chartType: string;
-    reason: string;
-    bestPractices: string[];
-  };
 };
 
 const panelClass = 'rounded-[1.75rem] border border-white/10 bg-slate-950/65 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur';
@@ -148,21 +111,15 @@ export function IngestionWizard({
   useEffect(() => {
     let cancelled = false;
 
+    // This effect isolates dataset discovery so workspace switches refresh options without touching upload/query logic.
     async function loadDatasets(): Promise<void> {
       setLoadingDatasets(true);
       try {
-        const response = await fetch(`${apiBase}/datasets`, {
-          headers: { 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
-        });
-        if (!response.ok) {
-          throw new Error(`Dataset list failed (${response.status})`);
-        }
-        const items = (await response.json()) as DatasetRecord[];
+        const items = await listWorkspaceDatasets(apiBase, userEmail, workspaceId);
         if (!cancelled) {
-          const scoped = items.filter((item) => item.workspace_id === workspaceId).slice(0, 4);
-          setDatasets(scoped);
-          if (scoped.length > 0) {
-            setSelectedDatasetId(String(scoped[0].id));
+          setDatasets(items);
+          if (items.length > 0) {
+            setSelectedDatasetId(String(items[0].id));
           }
         }
       } catch (requestError) {
@@ -207,6 +164,7 @@ export function IngestionWizard({
     }
   }
 
+  // Upload orchestration is intentionally linear so state transitions are explicit for the guided workflow.
   async function handleUpload(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!selectedFile) {
@@ -222,22 +180,11 @@ export function IngestionWizard({
     setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('workspace_id', String(workspaceId));
-      formData.append('dataset_name', datasetName.trim());
-      formData.append('file', selectedFile);
-
-      const response = await fetch(`${apiBase}/ingestion/upload`, {
-        method: 'POST',
-        headers: { 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
-        body: formData,
+      const result = await uploadDatasetFile(apiBase, userEmail, {
+        workspaceId,
+        datasetName: datasetName.trim(),
+        file: selectedFile,
       });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed (${response.status})`);
-      }
-
-      const result = (await response.json()) as IngestionUploadRead;
       setUploadResult(result);
       setSelectedDatasetId(String(result.dataset_id));
       setDatasets((previous) => [
@@ -261,6 +208,7 @@ export function IngestionWizard({
     }
   }
 
+  // Queries run against the server-side virtual table to guarantee parity with backend SQL semantics.
   async function runQuery(): Promise<void> {
     if (!activeDatasetId) {
       setError('Select a dataset before running a query.');
@@ -275,17 +223,10 @@ export function IngestionWizard({
     setQueryLoading(true);
 
     try {
-      const response = await fetch(`${apiBase}/datasets/${activeDatasetId}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': userEmail },
-        body: JSON.stringify({ sql: querySql }),
+      const result = await runDatasetSql(apiBase, userEmail, {
+        datasetId: activeDatasetId,
+        sql: querySql,
       });
-
-      if (!response.ok) {
-        throw new Error(`Query failed (${response.status})`);
-      }
-
-      const result = (await response.json()) as QueryResult;
       setQueryResult(result);
       setDashboardDraftPreview(null);
       setApprovalChecked(false);
@@ -297,6 +238,7 @@ export function IngestionWizard({
     }
   }
 
+  // Draft preview is separate from create so analysts can review/reword generated metadata before persistence.
   async function previewDashboardDraft(): Promise<void> {
     if (!queryResult || !activeDatasetId) {
       setError('Run a query first to preview a dashboard draft.');
@@ -343,6 +285,7 @@ export function IngestionWizard({
     setApprovalChecked(false);
   }
 
+  // Creation enforces an approval gate to reduce accidental dashboard churn from exploratory queries.
   async function createDashboardFromQuery(): Promise<void> {
     if (!queryResult || !activeDatasetId) {
       setError('Run a query first to create a dashboard from its result.');

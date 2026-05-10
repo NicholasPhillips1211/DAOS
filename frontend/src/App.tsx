@@ -4,73 +4,23 @@ import { GuidedTour } from './GuidedTour';
 import { IngestionWizard } from './IngestionWizard';
 import { Tooltip } from './Tooltip';
 import { useGuidedTour } from './useGuidedTour';
-
-type DashboardRecord = {
-  id: number;
-  workspace_id: number;
-  name: string;
-  description?: string | null;
-};
-
-type DashboardDraftPreview = {
-  name: string;
-  description: string;
-  recommendation?: {
-    chartType: string;
-    reason: string;
-    bestPractices: string[];
-  };
-};
-
-type ChartRecommendationRead = {
-  chart_type: string;
-  reason: string;
-  best_practices: string[];
-};
-
-type CommentRecord = {
-  id: number;
-  workspace_id: number;
-  resource_type: string;
-  resource_id: number;
-  user_email: string;
-  message: string;
-};
-
-type ShareRecord = {
-  id: number;
-  workspace_id: number;
-  resource_type: string;
-  resource_id: number;
-  target_email: string;
-  permission: string;
-};
-
-type AutomationPlanRecord = {
-  id: number;
-  workspace_id: number;
-  objective: string;
-  provider: string;
-  model_name?: string | null;
-  status: string;
-  summary: string;
-  automation_json: string;
-  created_at: string;
-  execution_status?: string | null;
-  executed_at?: string | null;
-  execution_results_json?: string | null;
-};
-
-type AutomationPlanPayload = {
-  title: string;
-  summary: string;
-  automation_score: number;
-  signals?: Record<string, number>;
-  triggers: Array<{ name: string; description: string }>;
-  actions: Array<{ name: string; description: string }>;
-  next_steps: string[];
-  provider_notes?: string;
-};
+import {
+  createCommentRecord,
+  createDashboardRecord,
+  createShareRecord,
+  executeAutomationPlan,
+  generateAutomationPlan,
+  recommendChart,
+} from './features/workspace/api';
+import {
+  AutomationPlanPayload,
+  AutomationPlanRecord,
+  ChartRecommendationRead,
+  CommentRecord,
+  DashboardDraftPreview,
+  DashboardRecord,
+  ShareRecord,
+} from './types/domain';
 
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
@@ -128,6 +78,7 @@ export default function App() {
     automations: automationPlans.length,
   };
 
+  // Keep form submit handlers thin: validate UI state, delegate network work to API modules, and update local view state.
   async function createDashboard(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!Number.isFinite(workspaceIdNumber)) {
@@ -137,19 +88,11 @@ export default function App() {
     setError(null);
     setDashboardLoading(true);
     try {
-      const response = await fetch(`${apiBase}/visualizations/dashboards`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
-        body: JSON.stringify({
-          workspace_id: workspaceIdNumber,
-          name: dashboardName,
-          description: dashboardDescription,
-        }),
+      const record = await createDashboardRecord(apiBase, commentEmail, {
+        workspace_id: workspaceIdNumber,
+        name: dashboardName,
+        description: dashboardDescription,
       });
-      if (!response.ok) {
-        throw new Error(`Dashboard create failed (${response.status})`);
-      }
-      const record = (await response.json()) as DashboardRecord;
       setDashboards((previous) => [record, ...previous].slice(0, 6));
       setStatus(`Dashboard created: ${record.name}`);
     } catch (requestError) {
@@ -170,21 +113,13 @@ export default function App() {
     setCommentLoading(true);
     try {
       const latestDashboard = dashboards[0];
-      const response = await fetch(`${apiBase}/collaboration/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
-        body: JSON.stringify({
-          workspace_id: workspaceIdNumber,
-          resource_type: 'dashboard',
-          resource_id: latestDashboard?.id ?? 1,
-          user_email: commentEmail,
-          message: commentMessage,
-        }),
+      const record = await createCommentRecord(apiBase, commentEmail, {
+        workspace_id: workspaceIdNumber,
+        resource_type: 'dashboard',
+        resource_id: latestDashboard?.id ?? 1,
+        user_email: commentEmail,
+        message: commentMessage,
       });
-      if (!response.ok) {
-        throw new Error(`Comment failed (${response.status})`);
-      }
-      const record = (await response.json()) as CommentRecord;
       setComments((previous) => [record, ...previous].slice(0, 6));
       setStatus(`Comment added by ${record.user_email}`);
       setCommentMessage('');
@@ -206,21 +141,13 @@ export default function App() {
     setShareLoading(true);
     try {
       const latestDashboard = dashboards[0];
-      const response = await fetch(`${apiBase}/collaboration/shares`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
-        body: JSON.stringify({
-          workspace_id: workspaceIdNumber,
-          resource_type: 'dashboard',
-          resource_id: latestDashboard?.id ?? 1,
-          target_email: shareEmail,
-          permission: sharePermission,
-        }),
+      const record = await createShareRecord(apiBase, commentEmail, {
+        workspace_id: workspaceIdNumber,
+        resource_type: 'dashboard',
+        resource_id: latestDashboard?.id ?? 1,
+        target_email: shareEmail,
+        permission: sharePermission,
       });
-      if (!response.ok) {
-        throw new Error(`Share failed (${response.status})`);
-      }
-      const record = (await response.json()) as ShareRecord;
       setShares((previous) => [record, ...previous].slice(0, 6));
       setStatus(`Shared dashboard with ${record.target_email}`);
     } catch (requestError) {
@@ -240,19 +167,10 @@ export default function App() {
     setError(null);
     setAutomationLoading(true);
     try {
-      const response = await fetch(`${apiBase}/automation/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': 'dev-key',
-          'X-User-Email': commentEmail
-        },
-        body: JSON.stringify({ workspace_id: workspaceIdNumber, objective: automationObjective }),
+      const record = await generateAutomationPlan(apiBase, commentEmail, {
+        workspace_id: workspaceIdNumber,
+        objective: automationObjective,
       });
-      if (!response.ok) {
-        throw new Error(`Automation generation failed (${response.status})`);
-      }
-      const record = (await response.json()) as AutomationPlanRecord;
       setAutomationPlans((previous) => [record, ...previous].slice(0, 6));
       setStatus(`Automation generated via ${record.provider}`);
     } catch (requestError) {
@@ -271,18 +189,7 @@ export default function App() {
     setError(null);
     setAutomationExecuting(true);
     try {
-      const response = await fetch(`${apiBase}/automation/${latestAutomationPlan.id}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': 'dev-key',
-          'X-User-Email': commentEmail
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Automation execution failed (${response.status})`);
-      }
-      const updated = (await response.json()) as AutomationPlanRecord;
+      const updated = await executeAutomationPlan(apiBase, commentEmail, latestAutomationPlan.id);
       setAutomationPlans((previous) =>
         previous.map((plan) => (plan.id === updated.id ? updated : plan)),
       );
@@ -295,12 +202,14 @@ export default function App() {
     }
   }
 
+  // This helper keeps the dashboard panel synchronized with the ingestion wizard handoff.
   function prepareDashboardFromDataset(name: string): void {
     setDashboardName(`${name} Overview`);
     setDashboardDescription(`Auto-prepared from dataset ${name}. Customize panels, then create dashboard.`);
     setStatus(`Dashboard draft prepared from dataset: ${name}`);
   }
 
+  // The query-to-dashboard approval flow is centralized here so both draft and direct create paths share validation/loading behavior.
   async function createDashboardFromQueryBlueprint(payload: {
     datasetName: string;
     datasetId: number;
@@ -317,20 +226,11 @@ export default function App() {
     setError(null);
     setDashboardLoading(true);
     try {
-      const response = await fetch(`${apiBase}/visualizations/dashboards`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
-        body: JSON.stringify({
-          workspace_id: workspaceIdNumber,
-          name: draft.name,
-          description: draft.description,
-        }),
+      const record = await createDashboardRecord(apiBase, commentEmail, {
+        workspace_id: workspaceIdNumber,
+        name: draft.name,
+        description: draft.description,
       });
-      if (!response.ok) {
-        throw new Error(`Dashboard create failed (${response.status})`);
-      }
-
-      const record = (await response.json()) as DashboardRecord;
       setDashboards((previous) => [record, ...previous].slice(0, 6));
       setDashboardName(record.name);
       setDashboardDescription(record.description ?? draft.description);
@@ -344,6 +244,7 @@ export default function App() {
     }
   }
 
+  // Build a human-readable draft from query shape plus recommendation service output.
   async function previewDashboardFromQueryBlueprint(payload: {
     datasetName: string;
     datasetId: number;
@@ -377,6 +278,7 @@ export default function App() {
     };
   }
 
+  // Recommendation failure should not block dashboard creation, so errors are intentionally swallowed to a nullable result.
   async function recommendChartForQuery(datasetId: number, columns: string[]): Promise<ChartRecommendationRead | null> {
     const xColumn = columns[0];
     if (!xColumn) {
@@ -384,20 +286,12 @@ export default function App() {
     }
 
     try {
-      const response = await fetch(`${apiBase}/visualizations/recommend-chart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          x_column: xColumn,
-          y_column: columns[1] ?? null,
-          goal: 'compare',
-        }),
+      return await recommendChart(apiBase, commentEmail, {
+        dataset_id: datasetId,
+        x_column: xColumn,
+        y_column: columns[1] ?? null,
+        goal: 'compare',
       });
-      if (!response.ok) {
-        return null;
-      }
-      return (await response.json()) as ChartRecommendationRead;
     } catch {
       return null;
     }

@@ -1,10 +1,7 @@
-from dataclasses import asdict
-
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.models.metadata import Dataset, Workspace
 from app.models.visualization import Dashboard
 from app.schemas.visualization import (
     ChartRecommendationRead,
@@ -15,10 +12,14 @@ from app.schemas.visualization import (
 from app.services.analytics_service import AnalyticsService
 from app.services.audit_service import AuditService
 from app.services.visualization_service import VisualizationService
+from app.services.workspace_workflow_service import WorkspaceWorkflowService
+from app.services.visualization_workflow_service import VisualizationWorkflowService
 
 router = APIRouter()
 visualization_service = VisualizationService()
 analytics_service = AnalyticsService()
+workspace_workflow_service = WorkspaceWorkflowService()
+visualization_workflow_service = VisualizationWorkflowService(visualization_service, analytics_service)
 audit_service = AuditService()
 
 
@@ -37,16 +38,12 @@ def create_dashboard(
 ) -> Dashboard:
     """Create a dashboard record as a container for charts and summaries."""
 
-    workspace = db.get(Workspace, payload.workspace_id)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    if not payload.name.strip():
-        raise HTTPException(status_code=400, detail="Dashboard name is required")
-
-    dashboard = Dashboard(workspace_id=payload.workspace_id, name=payload.name, description=payload.description)
-    db.add(dashboard)
-    db.commit()
-    db.refresh(dashboard)
+    dashboard = workspace_workflow_service.create_dashboard(
+        db,
+        payload.workspace_id,
+        payload.name,
+        payload.description,
+    )
 
     audit_service.log_event(
         payload.workspace_id,
@@ -64,19 +61,4 @@ def create_dashboard(
 def recommend_chart(payload: ChartRecommendationRequest, db: Session = Depends(get_db)) -> ChartRecommendationRead:
     """Recommend a chart type from the dataset's column shapes and goal."""
 
-    dataset = db.get(Dataset, payload.dataset_id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    if not dataset.storage_path:
-        raise HTTPException(status_code=400, detail="Dataset has no storage path")
-
-    try:
-        stats = analytics_service.dataset_statistics(dataset.storage_path)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Dataset file not found") from None
-
-    stats_map = {column["name"]: column for column in stats["columns"]}
-    x_kind = stats_map.get(payload.x_column, {}).get("data_type", "string")
-    y_kind = stats_map.get(payload.y_column, {}).get("data_type", None) if payload.y_column else None
-    recommendation = visualization_service.recommend_chart(x_kind, y_kind, payload.goal)
-    return ChartRecommendationRead(**asdict(recommendation))
+    return visualization_workflow_service.recommend_chart(db, payload)
