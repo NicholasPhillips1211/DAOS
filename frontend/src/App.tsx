@@ -18,6 +18,7 @@ type DashboardDraftPreview = {
   recommendation?: {
     chartType: string;
     reason: string;
+    bestPractices: string[];
   };
 };
 
@@ -370,6 +371,7 @@ export default function App() {
         ? {
             chartType: recommendation.chart_type,
             reason: recommendation.reason,
+            bestPractices: recommendation.best_practices,
           }
         : undefined,
     };

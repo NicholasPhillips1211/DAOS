@@ -48,3 +48,16 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
     assert stats_body["row_count"] == 2
     assert stats_body["column_count"] == 2
     assert stats_body["columns"][0]["name"] == "id"
+
+    dashboard_response = client.post(
+        "/api/v1/visualizations/dashboards",
+        json={"workspace_id": workspace_id, "name": "Sales Overview", "description": "Revenue tracking"},
+    )
+    assert dashboard_response.status_code == 201
+
+    audit_response = client.get(f"/api/v1/governance/audit?workspace_id={workspace_id}")
+    assert audit_response.status_code == 200
+    audit_types = [event["event_type"] for event in audit_response.json()]
+    assert "dataset.uploaded" in audit_types
+    assert "dataset.query_executed" in audit_types
+    assert "dashboard.created" in audit_types

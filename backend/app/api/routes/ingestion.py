@@ -1,16 +1,18 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_or_404
 from app.models.ingestion import DataQualityReport, IngestionJob
 from app.models.metadata import Dataset, DatasetState, Workspace
 from app.schemas.ingestion import IngestionUploadRead
+from app.services.audit_service import AuditService
 from app.services.quality_service import QualityService
 
 router = APIRouter()
 quality_service = QualityService()
+audit_service = AuditService()
 RAW_STORAGE_ROOT = Path(__file__).resolve().parents[3] / "data" / "raw"
 
 
@@ -19,9 +21,13 @@ async def upload_dataset(
     workspace_id: int = Form(...),
     dataset_name: str = Form(...),
     file: UploadFile = File(...),
+    x_user_email: str | None = Header(default=None, alias="X-User-Email"),
     db: Session = Depends(get_db),
 ) -> IngestionUploadRead:
     get_or_404(db, Workspace, workspace_id)
+
+    if not dataset_name.strip():
+        raise HTTPException(status_code=400, detail="Dataset name is required")
 
     source_name = file.filename or dataset_name
     if not source_name.lower().endswith(".csv"):
@@ -60,6 +66,15 @@ async def upload_dataset(
     db.commit()
     db.refresh(dataset)
     db.refresh(report)
+
+    audit_service.log_event(
+        workspace_id,
+        "dataset.uploaded",
+        actor=x_user_email or "system",
+        resource_type="dataset",
+        resource_id=dataset.id,
+        details=f"Uploaded {source_name} with quality score {job.quality_score}",
+    )
 
     return IngestionUploadRead(
         dataset_id=dataset.id,

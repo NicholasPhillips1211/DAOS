@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -13,11 +13,13 @@ from app.schemas.visualization import (
     DashboardRead,
 )
 from app.services.analytics_service import AnalyticsService
+from app.services.audit_service import AuditService
 from app.services.visualization_service import VisualizationService
 
 router = APIRouter()
 visualization_service = VisualizationService()
 analytics_service = AnalyticsService()
+audit_service = AuditService()
 
 
 @router.get("/dashboards", response_model=list[DashboardRead])
@@ -28,17 +30,33 @@ def list_dashboards(db: Session = Depends(get_db)) -> list[Dashboard]:
 
 
 @router.post("/dashboards", response_model=DashboardRead, status_code=201)
-def create_dashboard(payload: DashboardCreate, db: Session = Depends(get_db)) -> Dashboard:
+def create_dashboard(
+    payload: DashboardCreate,
+    x_user_email: str | None = Header(default=None, alias="X-User-Email"),
+    db: Session = Depends(get_db),
+) -> Dashboard:
     """Create a dashboard record as a container for charts and summaries."""
 
     workspace = db.get(Workspace, payload.workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Dashboard name is required")
 
     dashboard = Dashboard(workspace_id=payload.workspace_id, name=payload.name, description=payload.description)
     db.add(dashboard)
     db.commit()
     db.refresh(dashboard)
+
+    audit_service.log_event(
+        payload.workspace_id,
+        "dashboard.created",
+        actor=x_user_email or "system",
+        resource_type="dashboard",
+        resource_id=dashboard.id,
+        details=payload.description or payload.name,
+    )
+
     return dashboard
 
 

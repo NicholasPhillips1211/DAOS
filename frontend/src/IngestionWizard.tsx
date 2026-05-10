@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { WorkflowState } from './WorkflowState';
 
 type DatasetRecord = {
   id: number;
@@ -60,6 +61,7 @@ type DashboardDraftPreview = {
   recommendation?: {
     chartType: string;
     reason: string;
+    bestPractices: string[];
   };
 };
 
@@ -322,6 +324,20 @@ export function IngestionWizard({
     }
   }
 
+  function updateDashboardDraftPreview(patch: Partial<DashboardDraftPreview>): void {
+    setDashboardDraftPreview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        ...patch,
+      };
+    });
+    setApprovalChecked(false);
+  }
+
   async function createDashboardFromQuery(): Promise<void> {
     if (!queryResult || !activeDatasetId) {
       setError('Run a query first to create a dashboard from its result.');
@@ -523,10 +539,18 @@ export function IngestionWizard({
               </select>
             </label>
             <div className="mt-4 space-y-3">
-              {datasets.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                  No datasets registered yet. Upload the first CSV to begin the flow.
-                </div>
+              {loadingDatasets ? (
+                <WorkflowState
+                  variant="loading"
+                  title="Loading datasets"
+                  description="Fetching recent workspace datasets so you can choose one for query and dashboard creation."
+                />
+              ) : datasets.length === 0 ? (
+                <WorkflowState
+                  variant="empty"
+                  title="No datasets yet"
+                  description="Upload the first CSV to begin the flow and make the query runner available."
+                />
               ) : (
                 datasets.map((dataset) => (
                   <div key={dataset.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -586,8 +610,12 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-400">
-                Upload a CSV to see row counts, quality score, and storage details here.
+              <div className="mt-4">
+                <WorkflowState
+                  variant="info"
+                  title="Waiting for an upload"
+                  description="Upload a CSV to see row counts, quality score, and storage details here."
+                />
               </div>
             )}
           </div>
@@ -616,13 +644,38 @@ export function IngestionWizard({
                 {dashboardDraftPreview ? (
                   <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-4 text-sm text-slate-100">
                     <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">Draft preview</p>
-                    <p className="mt-2 text-base font-semibold text-white">{dashboardDraftPreview.name}</p>
-                    <p className="mt-2 leading-6 text-slate-200">{dashboardDraftPreview.description}</p>
+                    <div className="mt-3 space-y-3">
+                      <label className="block space-y-2">
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-300">Dashboard title</span>
+                        <input
+                          value={dashboardDraftPreview.name}
+                          onChange={(event) => updateDashboardDraftPreview({ name: event.target.value })}
+                          className={inputClass}
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs uppercase tracking-[0.2em] text-slate-300">Dashboard description</span>
+                        <textarea
+                          value={dashboardDraftPreview.description}
+                          onChange={(event) => updateDashboardDraftPreview({ description: event.target.value })}
+                          className={`${inputClass} min-h-24 resize-y`}
+                        />
+                      </label>
+                    </div>
                     {dashboardDraftPreview.recommendation ? (
                       <div className="mt-3 rounded-lg border border-white/15 bg-slate-950/50 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Chart recommendation</p>
                         <p className="mt-1 text-sm font-medium text-white">{dashboardDraftPreview.recommendation.chartType}</p>
                         <p className="mt-1 text-sm text-slate-300">{dashboardDraftPreview.recommendation.reason}</p>
+                        {dashboardDraftPreview.recommendation.bestPractices.length > 0 ? (
+                          <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                            {dashboardDraftPreview.recommendation.bestPractices.map((practice) => (
+                              <li key={practice} className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
+                                {practice}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -673,15 +726,23 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-400">
-                Select a dataset, tune the SQL in Query builder, then run the query to preview rows here.
+              <div className="mt-4">
+                <WorkflowState
+                  variant="empty"
+                  title="No query result yet"
+                  description="Select a dataset, tune the SQL in Query builder, then run the query to preview rows here."
+                />
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-rose-300">{error}</p> : null}
+      {error ? (
+        <div className="mt-4">
+          <WorkflowState variant="error" title="Workflow error" description={error} />
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/guidedtour.tsx","./src/homeview.tsx","./src/ingestionwizard.tsx","./src/tooltip.tsx","./src/main.tsx","./src/useguidedtour.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/guidedtour.tsx","./src/homeview.tsx","./src/ingestionwizard.tsx","./src/tooltip.tsx","./src/workflowstate.tsx","./src/main.tsx","./src/useguidedtour.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
