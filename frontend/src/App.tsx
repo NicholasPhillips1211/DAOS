@@ -279,6 +279,12 @@ export default function App() {
     }
   }
 
+  function prepareDashboardFromDataset(name: string): void {
+    setDashboardName(`${name} Overview`);
+    setDashboardDescription(`Auto-prepared from dataset ${name}. Customize panels, then create dashboard.`);
+    setStatus(`Dashboard draft prepared from dataset: ${name}`);
+  }
+
   return (
     <>
       {!showWorkspace ? (
@@ -364,7 +370,12 @@ export default function App() {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <section className={`${cardClass} space-y-5`}>
-            <IngestionWizard apiBase={apiBase} workspaceId={workspaceIdNumber || 1} />
+            <IngestionWizard
+              apiBase={apiBase}
+              workspaceId={workspaceIdNumber || 1}
+              onPrepareDashboard={prepareDashboardFromDataset}
+              onStatusChange={setStatus}
+            />
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>

@@ -26,11 +26,19 @@ type IngestionUploadRead = {
 type IngestionWizardProps = {
   apiBase: string;
   workspaceId: number;
+  onPrepareDashboard?: (datasetName: string) => void;
+  onStatusChange?: (message: string) => void;
 };
 
 type PreviewSummary = {
   headers: string[];
   sampleRows: string[][];
+};
+
+type QueryResult = {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
 };
 
 const panelClass = 'rounded-[1.75rem] border border-white/10 bg-slate-950/65 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur';
@@ -63,34 +71,42 @@ function parseCsvPreview(text: string, limit = 5): PreviewSummary {
 }
 
 function buildSuggestedSql(datasetName: string, headers: string[]): string {
-  const tableName = datasetName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '') || 'uploaded_dataset';
+  const title = datasetName.trim() || 'uploaded dataset';
   const selectedColumns = headers.slice(0, 5).map((header) => `"${header}"`).join(', ');
 
   return headers.length > 0
-    ? `SELECT ${selectedColumns}
-FROM ${tableName}
+    ? `-- ${title}
+SELECT ${selectedColumns}
+FROM dataset
 ORDER BY 1 DESC
 LIMIT 25;`
-    : `SELECT *
-FROM ${tableName}
+    : `-- ${title}
+SELECT *
+FROM dataset
 LIMIT 25;`;
 }
 
-export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) {
+export function IngestionWizard({ apiBase, workspaceId, onPrepareDashboard, onStatusChange }: IngestionWizardProps) {
   const [datasetName, setDatasetName] = useState('Quarterly Sales Upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewSummary>({ headers: [], sampleRows: [] });
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<IngestionUploadRead | null>(null);
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  const [querySql, setQuerySql] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
   const canUpload = Boolean(selectedFile && datasetName.trim());
+  const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
+
+  useEffect(() => {
+    setQuerySql(queryTemplate);
+  }, [queryTemplate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +120,11 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
         }
         const items = (await response.json()) as DatasetRecord[];
         if (!cancelled) {
-          setDatasets(items.filter((item) => item.workspace_id === workspaceId).slice(0, 4));
+          const scoped = items.filter((item) => item.workspace_id === workspaceId).slice(0, 4);
+          setDatasets(scoped);
+          if (scoped.length > 0) {
+            setSelectedDatasetId(String(scoped[0].id));
+          }
         }
       } catch (requestError) {
         if (!cancelled) {
@@ -179,6 +199,7 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
 
       const result = (await response.json()) as IngestionUploadRead;
       setUploadResult(result);
+      setSelectedDatasetId(String(result.dataset_id));
       setDatasets((previous) => [
         {
           id: result.dataset_id,
@@ -191,10 +212,46 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
         },
         ...previous.filter((dataset) => dataset.id !== result.dataset_id),
       ].slice(0, 4));
+      onPrepareDashboard?.(result.dataset_name);
+      onStatusChange?.(`Dataset uploaded: ${result.dataset_name}`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to upload dataset');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function runQuery(): Promise<void> {
+    if (!activeDatasetId) {
+      setError('Select a dataset before running a query.');
+      return;
+    }
+    if (!querySql.trim()) {
+      setError('Query text is required.');
+      return;
+    }
+
+    setError(null);
+    setQueryLoading(true);
+
+    try {
+      const response = await fetch(`${apiBase}/datasets/${activeDatasetId}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: querySql }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Query failed (${response.status})`);
+      }
+
+      const result = (await response.json()) as QueryResult;
+      setQueryResult(result);
+      onStatusChange?.(`Query completed with ${result.row_count} row${result.row_count === 1 ? '' : 's'}`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to run query');
+    } finally {
+      setQueryLoading(false);
     }
   }
 
@@ -305,9 +362,21 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
             <p className="mt-3 text-sm leading-6 text-slate-400">
               Use the detected columns to move straight into analysis. This template can be pasted into the lakehouse query endpoint or adapted for a dashboard metric.
             </p>
-            <pre className="mt-4 overflow-auto rounded-xl border border-white/10 bg-slate-950/70 p-4 text-xs leading-6 text-cyan-100">
-              {queryTemplate}
-            </pre>
+            <textarea
+              value={querySql}
+              onChange={(event) => setQuerySql(event.target.value)}
+              className="mt-4 min-h-36 w-full resize-y rounded-xl border border-white/10 bg-slate-950/70 p-4 font-mono text-xs leading-6 text-cyan-100 outline-none focus:border-cyan-300/50"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setQuerySql(queryTemplate)}
+                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-cyan-300/50"
+              >
+                Reset to template
+              </button>
+              <span className="text-xs text-slate-400">The query endpoint reads from a virtual table named dataset.</span>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -330,6 +399,21 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
               <h3 className="text-sm uppercase tracking-[0.25em] text-slate-300">Recent datasets</h3>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">Workspace #{workspaceId}</span>
             </div>
+            <label className="mt-4 block space-y-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Dataset for query runner</span>
+              <select
+                value={selectedDatasetId}
+                onChange={(event) => setSelectedDatasetId(event.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select dataset</option>
+                {datasets.map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {dataset.name} (ID {dataset.id})
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="mt-4 space-y-3">
               {datasets.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
@@ -356,6 +440,23 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
                 ))
               )}
             </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={runQuery}
+                disabled={!activeDatasetId || queryLoading}
+                className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {queryLoading ? 'Running query...' : 'Run query now'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onPrepareDashboard?.(datasetName)}
+                className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-300/50"
+              >
+                Use for dashboard
+              </button>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -379,6 +480,45 @@ export function IngestionWizard({ apiBase, workspaceId }: IngestionWizardProps) 
             ) : (
               <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-400">
                 Upload a CSV to see row counts, quality score, and storage details here.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm uppercase tracking-[0.25em] text-slate-300">Query result</h3>
+              <span className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-300">
+                {queryResult ? `${queryResult.row_count} row${queryResult.row_count === 1 ? '' : 's'}` : 'No query run'}
+              </span>
+            </div>
+            {queryResult ? (
+              <div className="mt-4 overflow-auto rounded-xl border border-white/10">
+                <table className="w-full border-collapse text-left text-sm text-slate-200">
+                  <thead className="bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-slate-400">
+                    <tr>
+                      {queryResult.columns.map((column) => (
+                        <th key={column} className="px-3 py-2 font-medium">
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queryResult.rows.slice(0, 10).map((row, rowIndex) => (
+                      <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white/5' : 'bg-transparent'}>
+                        {queryResult.columns.map((column) => (
+                          <td key={`${rowIndex}-${column}`} className="px-3 py-2 text-slate-300">
+                            {String(row[column] ?? '—')}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-400">
+                Select a dataset, tune the SQL in Query builder, then run the query to preview rows here.
               </div>
             )}
           </div>
