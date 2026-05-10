@@ -28,6 +28,19 @@ type IngestionWizardProps = {
   workspaceId: number;
   onPrepareDashboard?: (datasetName: string) => void;
   onStatusChange?: (message: string) => void;
+  onPreviewDashboardFromQuery?: (payload: {
+    datasetName: string;
+    datasetId: number;
+    columns: string[];
+    rowCount: number;
+  }) => Promise<DashboardDraftPreview>;
+  onCreateDashboardFromQuery?: (payload: {
+    datasetName: string;
+    datasetId: number;
+    columns: string[];
+    rowCount: number;
+    approvedDraft?: DashboardDraftPreview;
+  }) => Promise<void> | void;
 };
 
 type PreviewSummary = {
@@ -39,6 +52,15 @@ type QueryResult = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
   row_count: number;
+};
+
+type DashboardDraftPreview = {
+  name: string;
+  description: string;
+  recommendation?: {
+    chartType: string;
+    reason: string;
+  };
 };
 
 const panelClass = 'rounded-[1.75rem] border border-white/10 bg-slate-950/65 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur';
@@ -86,7 +108,14 @@ FROM dataset
 LIMIT 25;`;
 }
 
-export function IngestionWizard({ apiBase, workspaceId, onPrepareDashboard, onStatusChange }: IngestionWizardProps) {
+export function IngestionWizard({
+  apiBase,
+  workspaceId,
+  onPrepareDashboard,
+  onStatusChange,
+  onPreviewDashboardFromQuery,
+  onCreateDashboardFromQuery,
+}: IngestionWizardProps) {
   const [datasetName, setDatasetName] = useState('Quarterly Sales Upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewSummary>({ headers: [], sampleRows: [] });
@@ -97,6 +126,10 @@ export function IngestionWizard({ apiBase, workspaceId, onPrepareDashboard, onSt
   const [querySql, setQuerySql] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [draftPreviewLoading, setDraftPreviewLoading] = useState(false);
+  const [dashboardDraftPreview, setDashboardDraftPreview] = useState<DashboardDraftPreview | null>(null);
+  const [approvalChecked, setApprovalChecked] = useState(false);
+  const [dashboardCreatingFromQuery, setDashboardCreatingFromQuery] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
 
@@ -247,11 +280,86 @@ export function IngestionWizard({ apiBase, workspaceId, onPrepareDashboard, onSt
 
       const result = (await response.json()) as QueryResult;
       setQueryResult(result);
+      setDashboardDraftPreview(null);
+      setApprovalChecked(false);
       onStatusChange?.(`Query completed with ${result.row_count} row${result.row_count === 1 ? '' : 's'}`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to run query');
     } finally {
       setQueryLoading(false);
+    }
+  }
+
+  async function previewDashboardDraft(): Promise<void> {
+    if (!queryResult || !activeDatasetId) {
+      setError('Run a query first to preview a dashboard draft.');
+      return;
+    }
+    if (!onPreviewDashboardFromQuery) {
+      setError('Dashboard preview callback is not configured.');
+      return;
+    }
+
+    const selectedDataset = datasets.find((dataset) => dataset.id === activeDatasetId);
+    const resolvedDatasetName = selectedDataset?.name ?? uploadResult?.dataset_name ?? datasetName;
+
+    setError(null);
+    setDraftPreviewLoading(true);
+    try {
+      const preview = await onPreviewDashboardFromQuery({
+        datasetName: resolvedDatasetName,
+        datasetId: activeDatasetId,
+        columns: queryResult.columns,
+        rowCount: queryResult.row_count,
+      });
+      setDashboardDraftPreview(preview);
+      setApprovalChecked(false);
+      onStatusChange?.('Dashboard draft preview ready for verification.');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to preview dashboard draft');
+    } finally {
+      setDraftPreviewLoading(false);
+    }
+  }
+
+  async function createDashboardFromQuery(): Promise<void> {
+    if (!queryResult || !activeDatasetId) {
+      setError('Run a query first to create a dashboard from its result.');
+      return;
+    }
+    if (!dashboardDraftPreview) {
+      setError('Generate and verify a dashboard draft preview before approval.');
+      return;
+    }
+    if (!approvalChecked) {
+      setError('Confirm draft verification before approving dashboard creation.');
+      return;
+    }
+    if (!onCreateDashboardFromQuery) {
+      setError('Dashboard creation callback is not configured.');
+      return;
+    }
+
+    const selectedDataset = datasets.find((dataset) => dataset.id === activeDatasetId);
+    const resolvedDatasetName = selectedDataset?.name ?? uploadResult?.dataset_name ?? datasetName;
+
+    setError(null);
+    setDashboardCreatingFromQuery(true);
+    try {
+      await Promise.resolve(
+        onCreateDashboardFromQuery({
+          datasetName: resolvedDatasetName,
+          datasetId: activeDatasetId,
+          columns: queryResult.columns,
+          rowCount: queryResult.row_count,
+          approvedDraft: dashboardDraftPreview,
+        }),
+      );
+      onStatusChange?.(`Dashboard created from query result for ${resolvedDatasetName}`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to create dashboard from query');
+    } finally {
+      setDashboardCreatingFromQuery(false);
     }
   }
 
@@ -492,29 +600,77 @@ export function IngestionWizard({ apiBase, workspaceId, onPrepareDashboard, onSt
               </span>
             </div>
             {queryResult ? (
-              <div className="mt-4 overflow-auto rounded-xl border border-white/10">
-                <table className="w-full border-collapse text-left text-sm text-slate-200">
-                  <thead className="bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-slate-400">
-                    <tr>
-                      {queryResult.columns.map((column) => (
-                        <th key={column} className="px-3 py-2 font-medium">
-                          {column}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {queryResult.rows.slice(0, 10).map((row, rowIndex) => (
-                      <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white/5' : 'bg-transparent'}>
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={previewDashboardDraft}
+                    disabled={draftPreviewLoading}
+                    className="rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {draftPreviewLoading ? 'Building draft preview...' : 'Preview dashboard draft'}
+                  </button>
+                  <span className="text-xs text-slate-400">Generates a recommended chart-backed draft that must be verified before approval.</span>
+                </div>
+
+                {dashboardDraftPreview ? (
+                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-4 text-sm text-slate-100">
+                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">Draft preview</p>
+                    <p className="mt-2 text-base font-semibold text-white">{dashboardDraftPreview.name}</p>
+                    <p className="mt-2 leading-6 text-slate-200">{dashboardDraftPreview.description}</p>
+                    {dashboardDraftPreview.recommendation ? (
+                      <div className="mt-3 rounded-lg border border-white/15 bg-slate-950/50 p-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Chart recommendation</p>
+                        <p className="mt-1 text-sm font-medium text-white">{dashboardDraftPreview.recommendation.chartType}</p>
+                        <p className="mt-1 text-sm text-slate-300">{dashboardDraftPreview.recommendation.reason}</p>
+                      </div>
+                    ) : null}
+
+                    <label className="mt-4 flex items-start gap-2 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={approvalChecked}
+                        onChange={(event) => setApprovalChecked(event.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-950/70"
+                      />
+                      I verified this draft preview and approve dashboard creation.
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={createDashboardFromQuery}
+                      disabled={dashboardCreatingFromQuery || !approvalChecked}
+                      className="mt-4 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {dashboardCreatingFromQuery ? 'Creating dashboard...' : 'Approve and create dashboard'}
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="overflow-auto rounded-xl border border-white/10">
+                  <table className="w-full border-collapse text-left text-sm text-slate-200">
+                    <thead className="bg-slate-950/70 text-xs uppercase tracking-[0.2em] text-slate-400">
+                      <tr>
                         {queryResult.columns.map((column) => (
-                          <td key={`${rowIndex}-${column}`} className="px-3 py-2 text-slate-300">
-                            {String(row[column] ?? '—')}
-                          </td>
+                          <th key={column} className="px-3 py-2 font-medium">
+                            {column}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {queryResult.rows.slice(0, 10).map((row, rowIndex) => (
+                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white/5' : 'bg-transparent'}>
+                          {queryResult.columns.map((column) => (
+                            <td key={`${rowIndex}-${column}`} className="px-3 py-2 text-slate-300">
+                              {String(row[column] ?? '—')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-400">

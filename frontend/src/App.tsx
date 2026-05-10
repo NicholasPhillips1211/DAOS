@@ -12,6 +12,21 @@ type DashboardRecord = {
   description?: string | null;
 };
 
+type DashboardDraftPreview = {
+  name: string;
+  description: string;
+  recommendation?: {
+    chartType: string;
+    reason: string;
+  };
+};
+
+type ChartRecommendationRead = {
+  chart_type: string;
+  reason: string;
+  best_practices: string[];
+};
+
 type CommentRecord = {
   id: number;
   workspace_id: number;
@@ -285,6 +300,107 @@ export default function App() {
     setStatus(`Dashboard draft prepared from dataset: ${name}`);
   }
 
+  async function createDashboardFromQueryBlueprint(payload: {
+    datasetName: string;
+    datasetId: number;
+    columns: string[];
+    rowCount: number;
+    approvedDraft?: DashboardDraftPreview;
+  }): Promise<void> {
+    if (!Number.isFinite(workspaceIdNumber)) {
+      throw new Error('Workspace ID must be a number.');
+    }
+
+    const draft = payload.approvedDraft ?? await previewDashboardFromQueryBlueprint(payload);
+
+    setError(null);
+    setDashboardLoading(true);
+    try {
+      const response = await fetch(`${apiBase}/visualizations/dashboards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
+        body: JSON.stringify({
+          workspace_id: workspaceIdNumber,
+          name: draft.name,
+          description: draft.description,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Dashboard create failed (${response.status})`);
+      }
+
+      const record = (await response.json()) as DashboardRecord;
+      setDashboards((previous) => [record, ...previous].slice(0, 6));
+      setDashboardName(record.name);
+      setDashboardDescription(record.description ?? draft.description);
+      setStatus(`Dashboard created from query: ${record.name}`);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Failed to create dashboard from query';
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setDashboardLoading(false);
+    }
+  }
+
+  async function previewDashboardFromQueryBlueprint(payload: {
+    datasetName: string;
+    datasetId: number;
+    columns: string[];
+    rowCount: number;
+  }): Promise<DashboardDraftPreview> {
+    const columnSummary = payload.columns.slice(0, 6).join(', ') || 'No columns';
+    const recommendation = await recommendChartForQuery(payload.datasetId, payload.columns);
+    const generatedName = `${payload.datasetName} Query Board`;
+    const recommendationLine = recommendation
+      ? ` Recommended chart: ${recommendation.chart_type} (${recommendation.reason}).`
+      : '';
+    const generatedDescription =
+      `Auto-generated from dataset ${payload.datasetName} (ID ${payload.datasetId}). ` +
+      `Result sample: ${payload.rowCount} row${payload.rowCount === 1 ? '' : 's'}. ` +
+      `Suggested starter panels: ${columnSummary}.` + recommendationLine;
+
+    setDashboardName(generatedName);
+    setDashboardDescription(generatedDescription);
+
+    return {
+      name: generatedName,
+      description: generatedDescription,
+      recommendation: recommendation
+        ? {
+            chartType: recommendation.chart_type,
+            reason: recommendation.reason,
+          }
+        : undefined,
+    };
+  }
+
+  async function recommendChartForQuery(datasetId: number, columns: string[]): Promise<ChartRecommendationRead | null> {
+    const xColumn = columns[0];
+    if (!xColumn) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${apiBase}/visualizations/recommend-chart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'dev-key', 'X-User-Email': commentEmail },
+        body: JSON.stringify({
+          dataset_id: datasetId,
+          x_column: xColumn,
+          y_column: columns[1] ?? null,
+          goal: 'compare',
+        }),
+      });
+      if (!response.ok) {
+        return null;
+      }
+      return (await response.json()) as ChartRecommendationRead;
+    } catch {
+      return null;
+    }
+  }
+
   return (
     <>
       {!showWorkspace ? (
@@ -375,6 +491,8 @@ export default function App() {
               workspaceId={workspaceIdNumber || 1}
               onPrepareDashboard={prepareDashboardFromDataset}
               onStatusChange={setStatus}
+              onPreviewDashboardFromQuery={previewDashboardFromQueryBlueprint}
+              onCreateDashboardFromQuery={createDashboardFromQueryBlueprint}
             />
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
