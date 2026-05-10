@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { HomeView } from './HomeView';
 import { GuidedTour } from './GuidedTour';
+import { IngestionWizard } from './IngestionWizard';
 import { Tooltip } from './Tooltip';
 import { useGuidedTour } from './useGuidedTour';
 
@@ -363,6 +364,8 @@ export default function App() {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <section className={`${cardClass} space-y-5`}>
+            <IngestionWizard apiBase={apiBase} workspaceId={workspaceIdNumber || 1} />
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-cyan-200/90">Automation Studio</p>
