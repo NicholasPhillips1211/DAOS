@@ -29,6 +29,39 @@ const inputClass =
 
 const cardClass = 'rounded-[1.75rem] border border-white/10 bg-slate-950/65 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur';
 
+type DashboardTemplate = {
+  id: string;
+  label: string;
+  name: string;
+  description: string;
+  note: string;
+};
+
+// These presets speed up dashboard creation by giving the user a few opinionated starting points.
+const dashboardTemplates: DashboardTemplate[] = [
+  {
+    id: 'executive-summary',
+    label: 'Executive summary',
+    name: 'Executive Overview',
+    description: 'Weekly KPI summary for leadership with the highest-level trends and exceptions.',
+    note: 'Good for quick stakeholder review.',
+  },
+  {
+    id: 'operations-review',
+    label: 'Operations review',
+    name: 'Operations Control Panel',
+    description: 'Daily health view for operational metrics, alerts, and exceptions that need action.',
+    note: 'Best for teams handling live operations.',
+  },
+  {
+    id: 'analysis-deep-dive',
+    label: 'Analysis deep dive',
+    name: 'Trend Deep Dive',
+    description: 'Exploratory dashboard for comparison, segmentation, and root-cause analysis.',
+    note: 'Useful when a query needs follow-up investigation.',
+  },
+];
+
 function parseAutomationPayload(value: string): AutomationPlanPayload | null {
   try {
     return JSON.parse(value) as AutomationPlanPayload;
@@ -43,6 +76,7 @@ export default function App() {
   const [workspaceId, setWorkspaceId] = useState('1');
   const [dashboardName, setDashboardName] = useState('Executive Overview');
   const [dashboardDescription, setDashboardDescription] = useState('Weekly KPI summary for leadership');
+  const [selectedDashboardTemplate, setSelectedDashboardTemplate] = useState(dashboardTemplates[0].id);
   const [dashboards, setDashboards] = useState<DashboardRecord[]>([]);
 
   const [commentEmail, setCommentEmail] = useState('analyst@daos.local');
@@ -207,6 +241,19 @@ export default function App() {
     setDashboardName(`${name} Overview`);
     setDashboardDescription(`Auto-prepared from dataset ${name}. Customize panels, then create dashboard.`);
     setStatus(`Dashboard draft prepared from dataset: ${name}`);
+  }
+
+  // Template presets reduce repetitive setup and give the dashboard form a clearer starting point.
+  function applyDashboardTemplate(templateId: string): void {
+    const template = dashboardTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setSelectedDashboardTemplate(template.id);
+    setDashboardName(template.name);
+    setDashboardDescription(template.description);
+    setStatus(`Loaded dashboard template: ${template.label}`);
   }
 
   // The query-to-dashboard approval flow is centralized here so both draft and direct create paths share validation/loading behavior.
@@ -588,6 +635,39 @@ export default function App() {
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{dashboards.length}</span>
               </div>
               <form className="mt-4 space-y-3" onSubmit={createDashboard}>
+                {/* The template picker reduces blank-form friction by seeding a common dashboard shape. */}
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3">
+                  <p className="text-xs uppercase tracking-[0.25em] text-cyan-100">Starter templates</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">
+                    Pick a preset to seed the dashboard name and description, then refine it before saving.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {dashboardTemplates.map((template) => {
+                      const isSelected = selectedDashboardTemplate === template.id;
+
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyDashboardTemplate(template.id)}
+                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                            isSelected
+                              ? 'border-cyan-300/50 bg-cyan-400/15 text-white'
+                              : 'border-white/10 bg-slate-950/55 text-slate-300 hover:border-cyan-300/30 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold">{template.label}</span>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                              {isSelected ? 'Selected' : 'Use'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-inherit/80">{template.note}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <input value={dashboardName} onChange={(event) => setDashboardName(event.target.value)} className={inputClass} placeholder="Dashboard name" />
                 <textarea
                   value={dashboardDescription}
