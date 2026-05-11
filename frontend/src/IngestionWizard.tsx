@@ -29,6 +29,22 @@ type PreviewSummary = {
   sampleRows: string[][];
 };
 
+type WizardStage = 'choose' | 'preview' | 'upload' | 'query' | 'dashboard';
+
+type WizardStageConfig = {
+  id: WizardStage;
+  label: string;
+  detail: string;
+};
+
+const wizardStages: WizardStageConfig[] = [
+  { id: 'choose', label: 'Choose source', detail: 'Pick a CSV and name the dataset.' },
+  { id: 'preview', label: 'Preview schema', detail: 'Check headers and sample rows before upload.' },
+  { id: 'upload', label: 'Upload and profile', detail: 'Persist the file and generate quality metrics.' },
+  { id: 'query', label: 'Run analysis', detail: 'Use the suggested SQL against the virtual table.' },
+  { id: 'dashboard', label: 'Prepare delivery', detail: 'Turn the query result into a dashboard draft.' },
+];
+
 const panelClass = 'rounded-[1.75rem] border border-white/10 bg-slate-950/65 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur';
 const inputClass =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/8';
@@ -98,11 +114,24 @@ export function IngestionWizard({
   const [approvalChecked, setApprovalChecked] = useState(false);
   const [dashboardCreatingFromQuery, setDashboardCreatingFromQuery] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
   const canUpload = Boolean(selectedFile && datasetName.trim());
   const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
+  const currentStage: WizardStage = dashboardDraftPreview
+    ? 'dashboard'
+    : queryResult
+      ? 'query'
+      : uploadResult
+        ? 'upload'
+        : preview.headers.length > 0
+          ? 'preview'
+          : 'choose';
+  const currentStageIndex = wizardStages.findIndex((stage) => stage.id === currentStage);
+  const progressPercent = ((currentStageIndex + 1) / wizardStages.length) * 100;
+  const nextStage = wizardStages[Math.min(currentStageIndex + 1, wizardStages.length - 1)];
 
   useEffect(() => {
     setQuerySql(queryTemplate);
@@ -145,6 +174,7 @@ export function IngestionWizard({
     setSelectedFile(file);
     setUploadResult(null);
     setError(null);
+    setSuccessMessage(null);
 
     if (!file) {
       setPreview({ headers: [], sampleRows: [] });
@@ -177,6 +207,7 @@ export function IngestionWizard({
     }
 
     setError(null);
+  setSuccessMessage(null);
     setUploading(true);
 
     try {
@@ -201,6 +232,7 @@ export function IngestionWizard({
       ].slice(0, 4));
       onPrepareDashboard?.(result.dataset_name);
       onStatusChange?.(`Dataset uploaded: ${result.dataset_name}`);
+      setSuccessMessage(`Uploaded ${result.dataset_name} and generated profile results.`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to upload dataset');
     } finally {
@@ -220,6 +252,7 @@ export function IngestionWizard({
     }
 
     setError(null);
+  setSuccessMessage(null);
     setQueryLoading(true);
 
     try {
@@ -231,6 +264,7 @@ export function IngestionWizard({
       setDashboardDraftPreview(null);
       setApprovalChecked(false);
       onStatusChange?.(`Query completed with ${result.row_count} row${result.row_count === 1 ? '' : 's'}`);
+      setSuccessMessage(`Query completed with ${result.row_count} row${result.row_count === 1 ? '' : 's'} returned.`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to run query');
     } finally {
@@ -253,6 +287,7 @@ export function IngestionWizard({
     const resolvedDatasetName = selectedDataset?.name ?? uploadResult?.dataset_name ?? datasetName;
 
     setError(null);
+    setSuccessMessage(null);
     setDraftPreviewLoading(true);
     try {
       const preview = await onPreviewDashboardFromQuery({
@@ -264,6 +299,7 @@ export function IngestionWizard({
       setDashboardDraftPreview(preview);
       setApprovalChecked(false);
       onStatusChange?.('Dashboard draft preview ready for verification.');
+      setSuccessMessage('Dashboard draft preview is ready for review.');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to preview dashboard draft');
     } finally {
@@ -308,6 +344,7 @@ export function IngestionWizard({
     const resolvedDatasetName = selectedDataset?.name ?? uploadResult?.dataset_name ?? datasetName;
 
     setError(null);
+    setSuccessMessage(null);
     setDashboardCreatingFromQuery(true);
     try {
       await Promise.resolve(
@@ -320,6 +357,7 @@ export function IngestionWizard({
         }),
       );
       onStatusChange?.(`Dashboard created from query result for ${resolvedDatasetName}`);
+      setSuccessMessage(`Dashboard created from query result for ${resolvedDatasetName}.`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to create dashboard from query');
     } finally {
@@ -343,7 +381,52 @@ export function IngestionWizard({
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {successMessage ? (
+          <div className="xl:col-span-2">
+            <WorkflowState variant="success" title="Step complete" description={successMessage} />
+          </div>
+        ) : null}
+
         <form className="space-y-5" onSubmit={handleUpload}>
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-cyan-100">Workflow progress</p>
+                <p className="mt-1 text-sm text-slate-100">
+                  You are on <span className="font-semibold text-white">{wizardStages[currentStageIndex]?.label}</span>.
+                </p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-300">
+                Next: {nextStage.label}
+              </div>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-950/70">
+              <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-emerald-300" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {wizardStages.map((stage, index) => {
+                const isActive = stage.id === currentStage;
+                const isComplete = index < currentStageIndex;
+
+                return (
+                  <div
+                    key={stage.id}
+                    className={`rounded-xl border p-3 ${
+                      isActive
+                        ? 'border-cyan-300/40 bg-cyan-400/15 text-white'
+                        : isComplete
+                          ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-50'
+                          : 'border-white/10 bg-slate-950/50 text-slate-300'
+                    }`}
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.25em]">{stage.label}</p>
+                    <p className="mt-2 text-xs leading-5 text-inherit/90">{stage.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-[1fr_1.2fr]">
             <label className="space-y-2">
               <span className="text-xs uppercase tracking-[0.25em] text-slate-400">Dataset name</span>
@@ -424,7 +507,13 @@ export function IngestionWizard({
                 </table>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <WorkflowState
+              variant="empty"
+              title="Preview the file first"
+              description="Choose a CSV to generate a schema preview and sample rows before uploading the dataset."
+            />
+          )}
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -498,6 +587,11 @@ export function IngestionWizard({
                   variant="empty"
                   title="No datasets yet"
                   description="Upload the first CSV to begin the flow and make the query runner available."
+                  action={
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      After upload, the next step is {nextStage.label.toLowerCase()}.
+                    </p>
+                  }
                 />
               ) : (
                 datasets.map((dataset) => (
@@ -563,6 +657,11 @@ export function IngestionWizard({
                   variant="info"
                   title="Waiting for an upload"
                   description="Upload a CSV to see row counts, quality score, and storage details here."
+                  action={
+                    <p className="text-xs uppercase tracking-[0.2em] text-amber-50/80">
+                      Current stage: {wizardStages[currentStageIndex]?.label}
+                    </p>
+                  }
                 />
               </div>
             )}
@@ -679,6 +778,11 @@ export function IngestionWizard({
                   variant="empty"
                   title="No query result yet"
                   description="Select a dataset, tune the SQL in Query builder, then run the query to preview rows here."
+                  action={
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      The next action is {queryResult ? 'preview dashboard draft' : 'run the query'}.
+                    </p>
+                  }
                 />
               </div>
             )}
