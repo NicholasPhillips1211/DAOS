@@ -120,6 +120,7 @@ export function IngestionWizard({
   const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
   const canUpload = Boolean(selectedFile && datasetName.trim());
   const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
+  // The wizard now exposes the user's current place in the ingestion-to-insight path.
   const currentStage: WizardStage = dashboardDraftPreview
     ? 'dashboard'
     : queryResult
@@ -381,6 +382,7 @@ export function IngestionWizard({
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {/* Surface a single success state so completed steps are visible, not just implied by empty states. */}
         {successMessage ? (
           <div className="xl:col-span-2">
             <WorkflowState variant="success" title="Step complete" description={successMessage} />
@@ -388,6 +390,7 @@ export function IngestionWizard({
         ) : null}
 
         <form className="space-y-5" onSubmit={handleUpload}>
+          {/* The stage strip keeps the ingestion wizard oriented around the next concrete action. */}
           <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -508,6 +511,7 @@ export function IngestionWizard({
               </div>
             </div>
           ) : (
+            // The empty preview state now explains the next action instead of leaving the panel blank.
             <WorkflowState
               variant="empty"
               title="Preview the file first"
@@ -583,6 +587,7 @@ export function IngestionWizard({
                   description="Fetching recent workspace datasets so you can choose one for query and dashboard creation."
                 />
               ) : datasets.length === 0 ? (
+                // The empty dataset list now points the user toward the same guided flow used elsewhere.
                 <WorkflowState
                   variant="empty"
                   title="No datasets yet"
@@ -652,6 +657,7 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
+              // The upload placeholder now carries the current stage so the user understands what the wizard is waiting on.
               <div className="mt-4">
                 <WorkflowState
                   variant="info"
@@ -773,6 +779,7 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
+              // The empty query state now makes the next query action obvious and ties it back to the guided flow.
               <div className="mt-4">
                 <WorkflowState
                   variant="empty"
