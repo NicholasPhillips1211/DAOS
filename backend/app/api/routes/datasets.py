@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -11,10 +11,13 @@ dataset_workflow_service = DatasetWorkflowService()
 
 
 @router.get("", response_model=list[DatasetRead])
-def list_datasets(db: Session = Depends(get_db)) -> list[Dataset]:
-    """List datasets newest-first so the UI can show recent uploads first."""
+def list_datasets(
+    workspace_id: int | None = Query(default=None, description="Filter datasets to a single workspace"),
+    db: Session = Depends(get_db),
+) -> list[Dataset]:
+    """List datasets newest-first, optionally scoped to one workspace."""
 
-    return dataset_workflow_service.list_datasets(db)
+    return dataset_workflow_service.list_datasets(db, workspace_id=workspace_id)
 
 
 @router.post("", response_model=DatasetRead, status_code=201)

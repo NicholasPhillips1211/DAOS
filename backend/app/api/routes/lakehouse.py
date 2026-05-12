@@ -31,6 +31,7 @@ def query_dataset(
         resource_type="dataset",
         resource_id=dataset.id,
         details=f"Returned {len(rows)} rows",
+        db=db,
     )
 
     return DatasetQueryResponse(columns=columns, rows=rows, row_count=len(rows))
