@@ -4,6 +4,7 @@ import {
   CommentRecord,
   DashboardRecord,
   ShareRecord,
+  WorkspaceSummaryRead,
 } from '../../types/domain';
 import { assertOk, buildApiHeaders } from '../../lib/http';
 
@@ -122,4 +123,19 @@ export async function recommendChart(
   }
 
   return (await response.json()) as ChartRecommendationRead;
+}
+
+/**
+ * Fetch workspace summary signals so the UI can show onboarding guidance and recent context.
+ */
+export async function getWorkspaceSummary(
+  apiBase: string,
+  userEmail: string,
+  workspaceId: number,
+): Promise<WorkspaceSummaryRead> {
+  const response = await fetch(`${apiBase}/workspaces/${workspaceId}/summary`, {
+    headers: buildApiHeaders(userEmail, false),
+  });
+  assertOk(response, 'Workspace summary failed');
+  return (await response.json()) as WorkspaceSummaryRead;
 }
