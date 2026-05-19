@@ -20,17 +20,30 @@ def test_rbac_allows_generate_for_member_and_blocks_admin_only_action(client) ->
     settings.auth_enabled = True
     settings.api_keys_csv = "secret-key"
     try:
-        workspace_response = client.post("/api/v1/workspaces", json={"name": "rbac-ws", "description": "rbac checks"})
+        owner_headers = {"X-API-Key": "secret-key", "X-User-Email": "owner@example.com"}
+        headers = {"X-API-Key": "secret-key", "X-User-Email": "analyst@example.com"}
+
+        workspace_response = client.post(
+            "/api/v1/workspaces",
+            json={"name": "rbac-ws", "description": "rbac checks"},
+            headers=owner_headers,
+        )
         assert workspace_response.status_code == 201
         workspace_id = workspace_response.json()["id"]
 
         member_response = client.post(
             f"/api/v1/workspaces/{workspace_id}/members",
             json={"user_email": "analyst@example.com", "role": "analyst"},
+            headers=owner_headers,
         )
         assert member_response.status_code == 201
 
-        headers = {"X-API-Key": "secret-key", "X-User-Email": "analyst@example.com"}
+        member_response = client.post(
+            f"/api/v1/workspaces/{workspace_id}/members",
+            json={"user_email": "analyst@example.com", "role": "analyst"},
+            headers=headers,
+        )
+        assert member_response.status_code == 403
 
         generate_response = client.post(f"/api/v1/recommendations/generate?workspace_id={workspace_id}", headers=headers)
         assert generate_response.status_code == 200

@@ -4,24 +4,34 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.metadata import Dataset, Workspace, WorkspaceMembership
+from app.core.config import settings
+from app.models.metadata import Dataset, Workspace, WorkspaceMembership, WorkspaceRole
 
 
 class WorkspaceManagementService:
     """Own workspace registry and membership persistence."""
 
-    def list_workspaces(self, db: Session) -> list[Workspace]:
+    def list_workspaces(self, db: Session, *, user_email: str | None = None) -> list[Workspace]:
         """Return workspaces newest-first for workspace pickers."""
 
-        return db.query(Workspace).order_by(Workspace.created_at.desc()).all()
+        query = db.query(Workspace)
+        if settings.auth_enabled and user_email is not None:
+            query = query.join(WorkspaceMembership).filter(WorkspaceMembership.user_email == user_email).distinct()
+        return query.order_by(Workspace.created_at.desc()).all()
 
-    def create_workspace(self, db: Session, *, name: str, description: str | None) -> Workspace:
+    def create_workspace(self, db: Session, *, name: str, description: str | None, owner_email: str | None = None) -> Workspace:
         """Create a workspace because it is the root record for all downstream artifacts."""
 
         workspace = Workspace(name=name, description=description)
         db.add(workspace)
         db.commit()
         db.refresh(workspace)
+
+        if owner_email:
+            membership = WorkspaceMembership(workspace_id=workspace.id, user_email=owner_email, role=WorkspaceRole.owner)
+            db.add(membership)
+            db.commit()
+
         return workspace
 
     def add_member(self, db: Session, *, workspace_id: int, user_email: str, role: str) -> WorkspaceMembership:
