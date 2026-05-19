@@ -30,7 +30,7 @@ def list_plans(
 
 
 @router.post("/generate", response_model=AutomationPlanRead, status_code=201)
-def generate_plan(
+async def generate_plan(
     payload: AutomationGenerateRequest,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
@@ -38,7 +38,7 @@ def generate_plan(
     """Generate and persist an automation plan for a workspace objective."""
 
     require_workspace_role(db, payload.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
-    return automation_workflow_service.generate_plan(db, payload.workspace_id, payload.objective)
+    return await automation_workflow_service.generate_plan(db, payload.workspace_id, payload.objective)
 
 
 @router.get("/{plan_id}", response_model=AutomationPlanRead)

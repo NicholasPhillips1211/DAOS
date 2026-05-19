@@ -27,12 +27,12 @@ class AutomationWorkflowService:
             query = query.filter(AutomationPlan.workspace_id == workspace_id)
         return query.order_by(AutomationPlan.created_at.desc()).all()
 
-    def generate_plan(self, db: Session, workspace_id: int, objective: str) -> AutomationPlan:
+    async def generate_plan(self, db: Session, workspace_id: int, objective: str) -> AutomationPlan:
         """Validate workspace parent then delegate plan generation."""
 
         if db.get(Workspace, workspace_id) is None:
             raise HTTPException(status_code=404, detail="Workspace not found")
-        return self.automation_service.generate_plan(db, workspace_id, objective)
+        return await self.automation_service.generate_plan(db, workspace_id, objective)
 
     def get_plan_or_404(self, db: Session, plan_id: int) -> AutomationPlan:
         """Load a plan by id with a consistent 404 contract."""

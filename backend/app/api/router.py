@@ -10,7 +10,7 @@ ROUTES = [
     (workspaces, "/workspaces", ["workspaces"]),
     (datasets, "/datasets", ["datasets"]),
     (ingestion, "/ingestion", ["ingestion"]),
-    (lakehouse, "/datasets", ["lakehouse"]),
+    (lakehouse, "/lakehouse", ["lakehouse"]),
     (quality, "/datasets", ["quality"]),
     (pipelines, "/pipelines", ["pipelines"]),
     (ml, "/ml", ["ml"]),
