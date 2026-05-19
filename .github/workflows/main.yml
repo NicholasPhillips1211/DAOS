@@ -8,4 +8,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: No-op legacy workflow
-        run: echo "This workflow has been superseded by ci.yml."
+        run: echo "This workflow is kept only to satisfy stale editor diagnostics."
