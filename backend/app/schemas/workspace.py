@@ -41,3 +41,31 @@ class MembershipRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceDatasetSummary(BaseModel):
+    """Expose the most relevant dataset metadata for workspace overviews."""
+
+    id: int
+    name: str
+    source_type: str
+    state: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceSummaryRead(BaseModel):
+    """Return the current workspace health and onboarding signals."""
+
+    workspace_id: int
+    workspace_name: str
+    workspace_description: str | None = None
+    dataset_count: int
+    membership_count: int
+    has_datasets: bool
+    recommended_next_action: str
+    recent_datasets: list[WorkspaceDatasetSummary]
+    latest_dataset: WorkspaceDatasetSummary | None = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -150,6 +150,8 @@ Use the root route and health route to confirm the service is up:
 
 These modules provide the foundation for organizing work around named projects, registered datasets, and workspace state. They are the right place to extend when adding dataset metadata, workspace scoping, or new catalog behaviors.
 
+The workspace API also exposes a summary endpoint at `/api/v1/workspaces/{workspace_id}/summary` so the UI can surface onboarding guidance, recent datasets, and next-step prompts.
+
 ### Ingestion And Lakehouse
 
 These routes are intended for moving raw data into the platform and making it queryable in analytical form. Use them when implementing file upload, sync, staging, validation, or SQL-facing dataset workflows.

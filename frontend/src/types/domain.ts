@@ -75,6 +75,26 @@ export type DatasetRecord = {
   created_at: string;
 };
 
+export type WorkspaceDatasetSummary = {
+  id: number;
+  name: string;
+  source_type: string;
+  state: string;
+  created_at: string;
+};
+
+export type WorkspaceSummaryRead = {
+  workspace_id: number;
+  workspace_name: string;
+  workspace_description?: string | null;
+  dataset_count: number;
+  membership_count: number;
+  has_datasets: boolean;
+  recommended_next_action: string;
+  recent_datasets: WorkspaceDatasetSummary[];
+  latest_dataset?: WorkspaceDatasetSummary | null;
+};
+
 export type IngestionUploadRead = {
   dataset_id: number;
   workspace_id: number;

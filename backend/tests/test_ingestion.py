@@ -30,7 +30,7 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
     assert body["report_id"] > 0
 
     query_response = client.post(
-        f"/api/v1/datasets/{body['dataset_id']}/query",
+        f"/api/v1/lakehouse/{body['dataset_id']}/query",
         json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
     )
 

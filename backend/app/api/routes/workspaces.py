@@ -3,7 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.models.metadata import Workspace, WorkspaceMembership
-from app.schemas.workspace import MembershipCreate, MembershipRead, WorkspaceCreate, WorkspaceRead
+from app.schemas.workspace import (
+    MembershipCreate,
+    MembershipRead,
+    WorkspaceCreate,
+    WorkspaceRead,
+    WorkspaceSummaryRead,
+)
 from app.services.workspace_management_service import WorkspaceManagementService
 
 router = APIRouter()
@@ -29,3 +35,10 @@ def add_member(workspace_id: int, payload: MembershipCreate, db: Session = Depen
     """Attach a user to a workspace with a role used by downstream RBAC checks."""
 
     return workspace_management_service.add_member(db, workspace_id=workspace_id, user_email=payload.user_email, role=payload.role)
+
+
+@router.get("/{workspace_id}/summary", response_model=WorkspaceSummaryRead)
+def get_workspace_summary(workspace_id: int, db: Session = Depends(get_db)) -> dict[str, object]:
+    """Return onboarding signals for the active workspace."""
+
+    return workspace_management_service.get_workspace_summary(db, workspace_id=workspace_id)

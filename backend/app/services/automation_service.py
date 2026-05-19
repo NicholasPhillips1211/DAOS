@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from inspect import isawaitable
 from typing import Any
-from urllib import error, request
+
+import httpx
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +16,7 @@ from app.models.automation import AutomationPlan
 from app.models.business import BusinessTranslation
 from app.models.collaboration import Comment, Share
 from app.models.guidance import GuidancePlan
-from app.models.metadata import Dataset
+from app.models.metadata import Dataset, Workspace
 from app.models.ml import TrainedModel
 from app.models.pipeline import Pipeline
 from app.models.visualization import Dashboard
@@ -36,14 +38,15 @@ class WorkspaceSignals:
 class AutomationService:
     """Generate practical automation plans from workspace signals and optional LLM output."""
 
-    def generate_plan(self, db: Session, workspace_id: int, objective: str) -> AutomationPlan:
+    async def generate_plan(self, db: Session, workspace_id: int, objective: str) -> AutomationPlan:
         signals = self._collect_signals(db, workspace_id)
         fallback_plan = self._build_fallback_plan(objective, signals)
         provider = "heuristic"
         model_name: str | None = None
         plan_payload = fallback_plan
 
-        llm_payload = self._call_local_llm(objective, signals)
+        llm_payload_result = self._call_local_llm(objective, signals)
+        llm_payload = await llm_payload_result if isawaitable(llm_payload_result) else llm_payload_result
         if llm_payload is not None:
             provider = "lm-studio"
             model_name = settings.llm_model
@@ -117,7 +120,7 @@ class AutomationService:
             "provider_notes": "Generated without a local model because no LM Studio response was available.",
         }
 
-    def _call_local_llm(self, objective: str, signals: WorkspaceSignals) -> dict[str, Any] | None:
+    async def _call_local_llm(self, objective: str, signals: WorkspaceSignals) -> dict[str, Any] | None:
         base_url = settings.llm_base_url.strip().rstrip("/")
         if not base_url:
             return None
@@ -142,13 +145,12 @@ class AutomationService:
         if settings.llm_api_key.strip():
             headers["Authorization"] = f"Bearer {settings.llm_api_key.strip()}"
 
-        request_body = json.dumps(payload).encode("utf-8")
-        llm_request = request.Request(f"{base_url}/chat/completions", data=request_body, headers=headers, method="POST")
-
         try:
-            with request.urlopen(llm_request, timeout=settings.llm_timeout_seconds) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
-        except (error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+                response = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
+                response.raise_for_status()
+                response_payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError):
             return None
 
         try:
@@ -287,7 +289,7 @@ class AutomationExecutor:
         if existing:
             return {"action": "Onboard first dataset", "status": "skipped", "reason": "Workspace already has datasets"}
 
-        workspace = db.get(Dataset, workspace_id)
+        workspace = db.get(Workspace, workspace_id)
         if workspace is None:
             return {"action": "Onboard first dataset", "status": "failed", "reason": "Workspace not found"}
 

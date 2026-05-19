@@ -49,6 +49,7 @@ async def upload_dataset(
         resource_type="dataset",
         resource_id=dataset.id,
         details=f"Uploaded {source_name} with quality score {job.quality_score}",
+        db=db,
     )
 
     return IngestionUploadRead(

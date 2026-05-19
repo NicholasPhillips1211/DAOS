@@ -1,5 +1,3 @@
-feature,target
-1,yes
-2,no
-3,yes
-4,no
+id,amount
+1,10
+2,20

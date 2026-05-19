@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { listWorkspaceDatasets, runDatasetSql, uploadDatasetFile } from './features/ingestion/api';
-import { DashboardDraftPreview, DatasetRecord, IngestionUploadRead, QueryResult } from './types/domain';
+import { getWorkspaceSummary } from './features/workspace/api';
+import { DashboardDraftPreview, DatasetRecord, IngestionUploadRead, QueryResult, WorkspaceSummaryRead } from './types/domain';
 import { WorkflowState } from './WorkflowState';
 
 type IngestionWizardProps = {
@@ -113,6 +114,8 @@ export function IngestionWizard({
   const [dashboardDraftPreview, setDashboardDraftPreview] = useState<DashboardDraftPreview | null>(null);
   const [approvalChecked, setApprovalChecked] = useState(false);
   const [dashboardCreatingFromQuery, setDashboardCreatingFromQuery] = useState(false);
+  const [workspaceSummary, setWorkspaceSummary] = useState<WorkspaceSummaryRead | null>(null);
+  const [loadingWorkspaceSummary, setLoadingWorkspaceSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
@@ -120,6 +123,7 @@ export function IngestionWizard({
   const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
   const canUpload = Boolean(selectedFile && datasetName.trim());
   const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
+  // The wizard now exposes the user's current place in the ingestion-to-insight path.
   const currentStage: WizardStage = dashboardDraftPreview
     ? 'dashboard'
     : queryResult
@@ -136,6 +140,34 @@ export function IngestionWizard({
   useEffect(() => {
     setQuerySql(queryTemplate);
   }, [queryTemplate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkspaceSummary(): Promise<void> {
+      setLoadingWorkspaceSummary(true);
+      try {
+        const summary = await getWorkspaceSummary(apiBase, userEmail, workspaceId);
+        if (!cancelled) {
+          setWorkspaceSummary(summary);
+        }
+      } catch {
+        if (!cancelled) {
+          setWorkspaceSummary(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWorkspaceSummary(false);
+        }
+      }
+    }
+
+    void loadWorkspaceSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, userEmail, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +262,7 @@ export function IngestionWizard({
         },
         ...previous.filter((dataset) => dataset.id !== result.dataset_id),
       ].slice(0, 4));
+      void getWorkspaceSummary(apiBase, userEmail, workspaceId).then(setWorkspaceSummary).catch(() => undefined);
       onPrepareDashboard?.(result.dataset_name);
       onStatusChange?.(`Dataset uploaded: ${result.dataset_name}`);
       setSuccessMessage(`Uploaded ${result.dataset_name} and generated profile results.`);
@@ -376,11 +409,18 @@ export function IngestionWizard({
           </p>
         </div>
         <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
-          {loadingDatasets ? 'Loading recent datasets...' : `${datasets.length} recent dataset${datasets.length === 1 ? '' : 's'}`}
+          {loadingWorkspaceSummary
+            ? 'Loading workspace summary...'
+            : workspaceSummary
+              ? `${workspaceSummary.dataset_count} dataset${workspaceSummary.dataset_count === 1 ? '' : 's'} in workspace`
+              : loadingDatasets
+                ? 'Loading recent datasets...'
+                : `${datasets.length} recent dataset${datasets.length === 1 ? '' : 's'}`}
         </div>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {/* Surface a single success state so completed steps are visible, not just implied by empty states. */}
         {successMessage ? (
           <div className="xl:col-span-2">
             <WorkflowState variant="success" title="Step complete" description={successMessage} />
@@ -388,6 +428,7 @@ export function IngestionWizard({
         ) : null}
 
         <form className="space-y-5" onSubmit={handleUpload}>
+          {/* The stage strip keeps the ingestion wizard oriented around the next concrete action. */}
           <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -426,6 +467,40 @@ export function IngestionWizard({
               })}
             </div>
           </div>
+
+          {workspaceSummary ? (
+            workspaceSummary.has_datasets ? (
+              <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Workspace summary</p>
+                    <p className="mt-1 text-sm text-slate-100">{workspaceSummary.workspace_name}</p>
+                  </div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                    {workspaceSummary.membership_count} member{workspaceSummary.membership_count === 1 ? '' : 's'}
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-300">{workspaceSummary.recommended_next_action}</p>
+                {workspaceSummary.recent_datasets.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {workspaceSummary.recent_datasets.map((dataset) => (
+                      <div key={dataset.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-sm font-semibold text-white">{dataset.name}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">{dataset.source_type}</p>
+                        <p className="mt-2 text-xs text-slate-400">State: {dataset.state}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <WorkflowState
+                variant="empty"
+                title="No datasets yet"
+                description={workspaceSummary.recommended_next_action}
+              />
+            )
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-[1fr_1.2fr]">
             <label className="space-y-2">
@@ -508,6 +583,7 @@ export function IngestionWizard({
               </div>
             </div>
           ) : (
+            // The empty preview state now explains the next action instead of leaving the panel blank.
             <WorkflowState
               variant="empty"
               title="Preview the file first"
@@ -583,6 +659,7 @@ export function IngestionWizard({
                   description="Fetching recent workspace datasets so you can choose one for query and dashboard creation."
                 />
               ) : datasets.length === 0 ? (
+                // The empty dataset list now points the user toward the same guided flow used elsewhere.
                 <WorkflowState
                   variant="empty"
                   title="No datasets yet"
@@ -652,6 +729,7 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
+              // The upload placeholder now carries the current stage so the user understands what the wizard is waiting on.
               <div className="mt-4">
                 <WorkflowState
                   variant="info"
@@ -773,6 +851,7 @@ export function IngestionWizard({
                 </div>
               </div>
             ) : (
+              // The empty query state now makes the next query action obvious and ties it back to the guided flow.
               <div className="mt-4">
                 <WorkflowState
                   variant="empty"
