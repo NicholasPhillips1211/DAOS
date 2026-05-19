@@ -1,24 +1,11 @@
-name: CI Check
+name: Legacy Frontend Check
 
 on:
-  pull_request:
-    branches: [ main ] # Trigger on PRs targeting the main branch
+  workflow_dispatch:
 
 jobs:
-  test:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Environment
-        # Example for Node.js; swap with setup-python or setup-go as needed
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run tests
-        run: npm test # This command must return a non-zero exit code if tests fail
+      - name: No-op legacy workflow
+        run: echo "This workflow has been superseded by ci.yml."
