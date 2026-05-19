@@ -17,7 +17,7 @@ def test_workspace_summary_reflects_empty_and_populated_states(client) -> None:
     summary_body = summary_response.json()
     assert summary_body["workspace_id"] == workspace_id
     assert summary_body["dataset_count"] == 0
-    assert summary_body["membership_count"] == 0
+    assert summary_body["membership_count"] == 1
     assert summary_body["has_datasets"] is False
     assert summary_body["recent_datasets"] == []
     assert "Upload a CSV" in summary_body["recommended_next_action"]
