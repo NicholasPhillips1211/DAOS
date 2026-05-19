@@ -24,13 +24,14 @@ class WorkspaceManagementService:
 
         workspace = Workspace(name=name, description=description)
         db.add(workspace)
-        db.commit()
-        db.refresh(workspace)
+        db.flush()
 
         if owner_email:
             membership = WorkspaceMembership(workspace_id=workspace.id, user_email=owner_email, role=WorkspaceRole.owner)
             db.add(membership)
-            db.commit()
+
+        db.commit()
+        db.refresh(workspace)
 
         return workspace
 
