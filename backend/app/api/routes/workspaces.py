@@ -46,7 +46,13 @@ def add_member(
     """Attach a user to a workspace with a role used by downstream RBAC checks."""
 
     require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin})
-    return workspace_management_service.add_member(db, workspace_id=workspace_id, user_email=payload.user_email, role=payload.role)
+    return workspace_management_service.add_member(
+        db,
+        workspace_id=workspace_id,
+        user_email=payload.user_email,
+        role=payload.role,
+        actor_email=principal.user_email,
+    )
 
 
 @router.get("/{workspace_id}/summary", response_model=WorkspaceSummaryRead)
