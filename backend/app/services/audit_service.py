@@ -39,9 +39,8 @@ class AuditService:
                 details=details,
             )
             db.add(event)
-            if owns_session:
-                db.commit()
-                db.refresh(event)
+            db.commit()
+            db.refresh(event)
             return event
         finally:
             if owns_session:
