@@ -1,12 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from alembic import command
+from alembic.config import Config
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import Base, engine
 from app.core.error_handlers import register_error_handlers
 from app.core.logging_middleware import RequestLoggingMiddleware
 from app.core.security import SecurityHeadersMiddleware
@@ -21,13 +23,14 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Create the database schema on startup and keep shutdown minimal.
+    """Apply database migrations on startup and keep shutdown minimal.
 
-    The application is metadata-driven, so startup prepares tables before any
-    request handlers run and avoids extra shutdown work for the MVP.
+    Running Alembic at startup ensures schema changes are versioned and applied
+    consistently instead of relying on create_all behavior.
     """
 
-    Base.metadata.create_all(bind=engine)
+    alembic_cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
     yield
 
 
