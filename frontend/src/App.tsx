@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import { HomeView } from './HomeView';
 import { GuidedTour } from './GuidedTour';
 import { IngestionWizard } from './IngestionWizard';
@@ -73,6 +73,7 @@ function parseAutomationPayload(value: string): AutomationPlanPayload | null {
 export default function App() {
   const [showWorkspace, setShowWorkspace] = useState(false);
   const tour = useGuidedTour();
+  const dashboardSectionRef = useRef<HTMLElement | null>(null);
   const [workspaceId, setWorkspaceId] = useState('1');
   const [dashboardName, setDashboardName] = useState('Executive Overview');
   const [dashboardDescription, setDashboardDescription] = useState('Weekly KPI summary for leadership');
@@ -111,6 +112,10 @@ export default function App() {
     shares: shares.length,
     automations: automationPlans.length,
   };
+
+  function focusDashboardForm(): void {
+    dashboardSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   // Keep form submit handlers thin: validate UI state, delegate network work to API modules, and update local view state.
   async function createDashboard(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -241,6 +246,7 @@ export default function App() {
     setDashboardName(`${name} Overview`);
     setDashboardDescription(`Auto-prepared from dataset ${name}. Customize panels, then create dashboard.`);
     setStatus(`Dashboard draft prepared from dataset: ${name}`);
+    focusDashboardForm();
   }
 
   // Template presets reduce repetitive setup and give the dashboard form a clearer starting point.
@@ -311,6 +317,7 @@ export default function App() {
 
     setDashboardName(generatedName);
     setDashboardDescription(generatedDescription);
+    focusDashboardForm();
 
     return {
       name: generatedName,
@@ -607,7 +614,7 @@ export default function App() {
           </section>
 
           <aside className="space-y-6">
-            <section className={cardClass}>
+            <section className={cardClass} ref={dashboardSectionRef}>
               <p className="text-xs uppercase tracking-[0.35em] text-amber-200/90">Local LLM Bridge</p>
               <h3 className="mt-2 text-2xl font-semibold text-white">LM Studio-compatible by design</h3>
               <p className="mt-3 text-sm leading-6 text-slate-300">
