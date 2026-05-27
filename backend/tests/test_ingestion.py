@@ -29,6 +29,14 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
     assert body["rejected_rows"] == 0
     assert body["report_id"] > 0
 
+    quality_response = client.get(f"/api/v1/datasets/{body['dataset_id']}/quality")
+    assert quality_response.status_code == 200
+    quality_body = quality_response.json()
+    assert quality_body["metadata"]["profile_version"] == "1.1"
+    assert quality_body["metadata"]["source_name"] == "sales.csv"
+    assert quality_body["metadata"]["column_count"] == 2
+    assert quality_body["metadata"]["profile_fingerprint"]
+
     query_response = client.post(
         f"/api/v1/lakehouse/{body['dataset_id']}/query",
         json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
