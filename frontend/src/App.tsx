@@ -4,6 +4,7 @@ import { GuidedTour } from './GuidedTour';
 import { IngestionWizard } from './IngestionWizard';
 import { Tooltip } from './Tooltip';
 import { useGuidedTour } from './useGuidedTour';
+import { apiBase } from './services/apiConfig';
 import {
   createCommentRecord,
   createDashboardRecord,
@@ -22,7 +23,9 @@ import {
   ShareRecord,
 } from './types/domain';
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+type AppProps = {
+  initialWorkspaceVisible?: boolean;
+};
 
 const inputClass =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-300/60 focus:bg-white/8';
@@ -70,8 +73,8 @@ function parseAutomationPayload(value: string): AutomationPlanPayload | null {
   }
 }
 
-export default function App() {
-  const [showWorkspace, setShowWorkspace] = useState(false);
+export default function App({ initialWorkspaceVisible = false }: AppProps) {
+  const [showWorkspace, setShowWorkspace] = useState(initialWorkspaceVisible);
   const tour = useGuidedTour();
   const dashboardSectionRef = useRef<HTMLElement | null>(null);
   const [workspaceId, setWorkspaceId] = useState('1');

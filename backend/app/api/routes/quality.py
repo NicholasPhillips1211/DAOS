@@ -44,6 +44,7 @@ def get_quality_report(dataset_id: int, db: Session = Depends(get_db)) -> Qualit
         quality_score=summary.get("quality_score", 0),
         columns=summary.get("columns", []),
         issues=summary.get("issues", []),
+        metadata=summary.get("metadata"),
         created_at=report.created_at,
     )
 
