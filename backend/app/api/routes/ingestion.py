@@ -8,12 +8,14 @@ from app.models.metadata import Workspace
 from app.schemas.ingestion import IngestionUploadRead
 from app.services.audit_service import AuditService
 from app.services.ingestion_workflow_service import IngestionWorkflowService
+from app.services.metadata_service import MetadataService
 from app.services.quality_service import QualityService
 
 router = APIRouter()
 quality_service = QualityService()
 ingestion_workflow_service = IngestionWorkflowService(quality_service)
 audit_service = AuditService()
+metadata_service = MetadataService()
 RAW_STORAGE_ROOT = Path(__file__).resolve().parents[3] / "data" / "raw"
 
 
@@ -50,6 +52,22 @@ async def upload_dataset(
         resource_id=dataset.id,
         details=f"Uploaded {source_name} with quality score {job.quality_score}",
         db=db,
+    )
+
+    metadata_service.emit_event(
+        db,
+        workspace_id=workspace_id,
+        event_type="metadata.ingestion.profile_created",
+        resource_type="dataset",
+        resource_id=dataset.id,
+        actor=x_user_email or "system",
+        details={
+            "dataset_name": dataset.name,
+            "report_id": report.id,
+            "row_count": job.row_count,
+            "rejected_rows": job.rejected_rows,
+            "quality_score": job.quality_score,
+        },
     )
 
     return IngestionUploadRead(
