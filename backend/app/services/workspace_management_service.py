@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -6,10 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.metadata import Dataset, Workspace, WorkspaceMembership, WorkspaceRole
+from app.services.audit_service import AuditService
 
 
 class WorkspaceManagementService:
     """Own workspace registry and membership persistence."""
+
+    def __init__(self):
+        self.audit_service = AuditService()
 
     def list_workspaces(self, db: Session, *, user_email: str | None = None) -> list[Workspace]:
         """Return workspaces newest-first for workspace pickers."""
@@ -33,9 +37,27 @@ class WorkspaceManagementService:
         db.commit()
         db.refresh(workspace)
 
+        self.audit_service.log_event(
+            workspace_id=workspace.id,
+            event_type="workspace.created",
+            actor=owner_email,
+            resource_type="workspace",
+            resource_id=workspace.id,
+            details=f"Workspace '{name}' created.",
+            db=db,
+        )
+
         return workspace
 
-    def add_member(self, db: Session, *, workspace_id: int, user_email: str, role: str) -> WorkspaceMembership:
+    def add_member(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        user_email: str,
+        role: str,
+        actor_email: str | None = None,
+    ) -> WorkspaceMembership:
         """Attach a user to an existing workspace using the caller-provided role."""
 
         workspace = db.get(Workspace, workspace_id)
@@ -46,6 +68,17 @@ class WorkspaceManagementService:
         db.add(membership)
         db.commit()
         db.refresh(membership)
+
+        self.audit_service.log_event(
+            workspace_id=workspace_id,
+            event_type="workspace.member_added",
+            actor=actor_email,
+            resource_type="workspace",
+            resource_id=workspace_id,
+            details=f"User {user_email} added with role {role}.",
+            db=db,
+        )
+
         return membership
 
     def get_workspace_summary(self, db: Session, *, workspace_id: int) -> dict[str, object]:

@@ -96,6 +96,8 @@ def test_rbac_allows_generate_for_member_and_blocks_admin_only_action(client) ->
         audit_response = client.get(f"/api/v1/governance/audit?workspace_id={workspace_id}", headers=headers)
         assert audit_response.status_code == 200
         audit_events = audit_response.json()
+        assert any(event["event_type"] == "workspace.created" for event in audit_events)
+        assert any(event["event_type"] == "workspace.member_added" for event in audit_events)
         assert any(event["event_type"] == "security.access_denied" for event in audit_events)
     finally:
         settings.auth_enabled = original_enabled
