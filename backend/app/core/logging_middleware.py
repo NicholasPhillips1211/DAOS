@@ -14,6 +14,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.observability import observability_store
+
 logger = logging.getLogger("daos.requests")
 
 
@@ -37,6 +39,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response.status_code,
             elapsed_ms,
             request_id,
+        )
+
+        observability_store.record_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=elapsed_ms,
         )
 
         return response

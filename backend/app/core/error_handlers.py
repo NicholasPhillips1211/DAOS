@@ -14,6 +14,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.observability import observability_store
+
 logger = logging.getLogger("daos.errors")
 
 
@@ -31,6 +33,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
     request_id = getattr(request.state, "request_id", None)
     logger.warning("http_error status=%s detail=%s request_id=%s", exc.status_code, exc.detail, request_id)
+    observability_store.record_error(error_type=f"http_{exc.status_code}")
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -48,6 +51,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         for err in exc.errors()
     ]
     logger.warning("validation_error fields=%d request_id=%s", len(field_errors), request_id)
+    observability_store.record_error(error_type="validation_error")
 
     return JSONResponse(
         status_code=422,
@@ -61,6 +65,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
     request_id = getattr(request.state, "request_id", None)
     logger.exception("unhandled_error request_id=%s", request_id)
+    observability_store.record_error(error_type="internal_error")
 
     return JSONResponse(
         status_code=500,

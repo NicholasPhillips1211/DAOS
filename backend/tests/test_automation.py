@@ -37,6 +37,10 @@ def test_automation_plan_generation_uses_local_llm_payload(client, monkeypatch) 
     payload = json.loads(body["automation_json"])
     assert payload["automation_score"] == 88
     assert payload["actions"][0]["name"] == "Refresh dashboards"
+    assert 0 <= payload["confidence_score"] <= 1
+    assert payload["trace"]["trace_id"].startswith("auto-")
+    assert payload["trace"]["provider"] == "lm-studio"
+    assert payload["trace"]["grounding"]["signal_snapshot"]
 
 
 def test_automation_plan_generation_falls_back_without_llm(client, monkeypatch) -> None:
@@ -60,6 +64,9 @@ def test_automation_plan_generation_falls_back_without_llm(client, monkeypatch) 
     assert payload["summary"]
     assert len(payload["actions"]) > 0
     assert len(payload["next_steps"]) > 0
+    assert 0 <= payload["confidence_score"] <= 1
+    assert payload["trace"]["provider"] == "heuristic"
+    assert payload["trace"]["grounding"]["evidence"]
 
 
 def test_automation_plan_execution_updates_status(client, monkeypatch) -> None:
