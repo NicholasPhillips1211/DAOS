@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.core.auth import Principal, get_current_principal
 from app.models.recommendation import Recommendation
 from app.schemas.recommendation import RecommendationGenerateResponse, RecommendationRead

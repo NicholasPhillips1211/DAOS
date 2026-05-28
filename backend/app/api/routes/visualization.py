@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Header, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.models.visualization import Dashboard
 from app.schemas.visualization import (
     ChartRecommendationRead,

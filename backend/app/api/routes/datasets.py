@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.services.dataset_workflow_service import DatasetWorkflowService

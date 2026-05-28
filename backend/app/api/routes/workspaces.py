@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.core.auth import Principal, get_current_principal, require_workspace_role
 from app.models.metadata import Workspace, WorkspaceMembership
 from app.models.metadata import WorkspaceRole
