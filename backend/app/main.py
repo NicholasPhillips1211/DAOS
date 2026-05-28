@@ -39,6 +39,9 @@ async def lifespan(_: FastAPI):
     yield
 
 
+if settings.auth_enabled and not settings.api_keys_csv:
+    raise RuntimeError("AUTH is enabled but `API_KEYS_CSV` / `api_keys_csv` is empty. Provide API keys or disable auth for local development.")
+
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 register_error_handlers(app)
