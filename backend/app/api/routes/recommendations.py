@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -27,10 +27,13 @@ def generate_recommendations(
 
 @router.get("", response_model=list[RecommendationRead])
 def list_recommendations(
+    response: Response,
     workspace_id: int,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
+    pagination: dict = Depends(get_pagination),
 ) -> list[Recommendation]:
     """Return previously generated recommendations for the workspace."""
-
-    return workflow_service.list(db, workspace_id, principal)
+    total = workflow_service.count(db, workspace_id)
+    response.headers["X-Total-Count"] = str(total)
+    return workflow_service.list_paginated(db, workspace_id, principal, limit=pagination["limit"], offset=pagination["offset"])

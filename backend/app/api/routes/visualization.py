@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -24,10 +24,11 @@ audit_service = AuditService()
 
 
 @router.get("/dashboards", response_model=list[DashboardRead])
-def list_dashboards(db: Session = Depends(get_db)) -> list[Dashboard]:
+def list_dashboards(response: Response, db: Session = Depends(get_db), pagination: dict = Depends(get_pagination)) -> list[Dashboard]:
     """List dashboards newest-first for the workspace overview page."""
-
-    return db.query(Dashboard).order_by(Dashboard.created_at.desc()).all()
+    total = db.query(Dashboard).count()
+    response.headers["X-Total-Count"] = str(total)
+    return db.query(Dashboard).order_by(Dashboard.created_at.desc()).limit(pagination["limit"]).offset(pagination["offset"]).all()
 
 
 @router.post("/dashboards", response_model=DashboardRead, status_code=201)

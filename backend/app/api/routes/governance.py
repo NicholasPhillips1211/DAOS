@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -14,14 +14,18 @@ governance_workflow_service = GovernanceWorkflowService()
 
 @router.get("/audit", response_model=list[AuditEventRead])
 def list_audit_events(
+    response: Response,
     workspace_id: int,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
+    pagination: dict = Depends(get_pagination),
 ) -> list[AuditEvent]:
     """Expose audit events in reverse chronological order for workspace review."""
 
     require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
-    return governance_workflow_service.list_audit_events(db, workspace_id)
+    total = governance_workflow_service.count_audit_events(db, workspace_id)
+    response.headers["X-Total-Count"] = str(total)
+    return governance_workflow_service.list_audit_events_paginated(db, workspace_id, limit=pagination["limit"], offset=pagination["offset"])
 
 
 @router.post("/masks", response_model=DataMaskRead, status_code=201)

@@ -35,5 +35,24 @@ class RecommendationWorkflowService:
             db.query(Recommendation)
             .filter(Recommendation.workspace_id == workspace_id)
             .order_by(Recommendation.created_at.desc())
+            .limit(50)
+            .offset(0)
             .all()
         )
+
+    def list_paginated(self, db: Session, workspace_id: int, principal: Principal, limit: int = 50, offset: int = 0) -> list[Recommendation]:
+        workspace = db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+        return (
+            db.query(Recommendation)
+            .filter(Recommendation.workspace_id == workspace_id)
+            .order_by(Recommendation.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    def count(self, db: Session, workspace_id: int) -> int:
+        return db.query(Recommendation).filter(Recommendation.workspace_id == workspace_id).count()

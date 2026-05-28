@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -12,12 +12,15 @@ dataset_workflow_service = DatasetWorkflowService()
 
 @router.get("", response_model=list[DatasetRead])
 def list_datasets(
+    response: Response,
     workspace_id: int | None = Query(default=None, description="Filter datasets to a single workspace"),
     db: Session = Depends(get_db),
+    pagination: dict = Depends(get_pagination),
 ) -> list[Dataset]:
     """List datasets newest-first, optionally scoped to one workspace."""
-
-    return dataset_workflow_service.list_datasets(db, workspace_id=workspace_id)
+    total = dataset_workflow_service.count_datasets(db, workspace_id=workspace_id)
+    response.headers["X-Total-Count"] = str(total)
+    return dataset_workflow_service.list_datasets(db, workspace_id=workspace_id, limit=pagination["limit"], offset=pagination["offset"])
 
 
 @router.post("", response_model=DatasetRead, status_code=201)

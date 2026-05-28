@@ -1,0 +1,44 @@
+name: Auth requires API keys
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  auth-requirement:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install backend (dev deps)
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Verify app fails when AUTH_ENABLED=true and no API keys
+        working-directory: backend
+        env:
+          AUTH_ENABLED: "true"
+        run: |
+          python - <<'PY'
+import sys
+try:
+    import importlib
+    importlib.invalidate_caches()
+    import app.main as m
+except Exception as e:
+    print('App failed to import as expected:', type(e).__name__, e)
+    sys.exit(0)
+else:
+    print('App imported unexpectedly; auth safety check failed')
+    sys.exit(1)
+PY

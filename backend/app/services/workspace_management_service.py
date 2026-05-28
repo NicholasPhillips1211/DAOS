@@ -15,13 +15,21 @@ class WorkspaceManagementService:
     def __init__(self):
         self.audit_service = AuditService()
 
-    def list_workspaces(self, db: Session, *, user_email: str | None = None) -> list[Workspace]:
-        """Return workspaces newest-first for workspace pickers."""
+    def list_workspaces(self, db: Session, *, user_email: str | None = None, limit: int = 50, offset: int = 0) -> list[Workspace]:
+        """Return workspaces newest-first for workspace pickers with pagination."""
 
         query = db.query(Workspace)
         if settings.auth_enabled and user_email is not None:
             query = query.join(WorkspaceMembership).filter(WorkspaceMembership.user_email == user_email).distinct()
-        return query.order_by(Workspace.created_at.desc()).all()
+        return query.order_by(Workspace.created_at.desc()).limit(limit).offset(offset).all()
+
+    def count_workspaces(self, db: Session, *, user_email: str | None = None) -> int:
+        """Return the total count of workspaces for pagination headers."""
+
+        query = db.query(Workspace)
+        if settings.auth_enabled and user_email is not None:
+            query = query.join(WorkspaceMembership).filter(WorkspaceMembership.user_email == user_email).distinct()
+        return query.count()
 
     def create_workspace(self, db: Session, *, name: str, description: str | None, owner_email: str | None = None) -> Workspace:
         """Create a workspace because it is the root record for all downstream artifacts."""

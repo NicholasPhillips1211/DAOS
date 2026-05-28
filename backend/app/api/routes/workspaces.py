@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
@@ -19,10 +19,18 @@ workspace_management_service = WorkspaceManagementService()
 
 
 @router.get("", response_model=list[WorkspaceRead])
-def list_workspaces(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> list[Workspace]:
+def list_workspaces(
+    response: Response,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+    pagination: dict = Depends(get_pagination),
+) -> list[Workspace]:
     """List workspaces newest-first so the freshest project is easiest to find."""
-
-    return workspace_management_service.list_workspaces(db, user_email=principal.user_email)
+    total = workspace_management_service.count_workspaces(db, user_email=principal.user_email)
+    response.headers["X-Total-Count"] = str(total)
+    return workspace_management_service.list_workspaces(
+        db, user_email=principal.user_email, limit=pagination["limit"], offset=pagination["offset"]
+    )
 
 
 @router.post("", response_model=WorkspaceRead, status_code=201)
