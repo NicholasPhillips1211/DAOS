@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.core.auth import Principal, get_current_principal
 from app.models.metadata import WorkspaceRole
 from app.models.pipeline import Pipeline, PipelineRun
@@ -15,10 +15,11 @@ pipeline_workflow_service = PipelineWorkflowService(pipeline_service)
 
 
 @router.get("", response_model=list[PipelineRead])
-def list_pipelines(db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal), workspace_id: int | None = None) -> list[Pipeline]:
+def list_pipelines(response: Response, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal), workspace_id: int | None = None, pagination: dict = Depends(get_pagination)) -> list[Pipeline]:
     """List pipelines, optionally scoped to a workspace when auth is active."""
-
-    return pipeline_workflow_service.list_pipelines(db, principal, workspace_id)
+    total = pipeline_workflow_service.count_pipelines(db, principal, workspace_id)
+    response.headers["X-Total-Count"] = str(total)
+    return pipeline_workflow_service.list_pipelines(db, principal, workspace_id, limit=pagination["limit"], offset=pagination["offset"])
 
 
 @router.post("", response_model=PipelineRead, status_code=201)

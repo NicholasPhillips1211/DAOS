@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./daos.db"
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     enforce_security_headers: bool = True
-    auth_enabled: bool = False
+    # Enable auth by default to avoid accidentally shipping an open API.
+    auth_enabled: bool = True
     api_keys_csv: str = ""
     llm_base_url: str = "http://localhost:1234/v1"
     llm_model: str = "local-model"

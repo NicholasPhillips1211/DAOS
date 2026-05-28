@@ -19,13 +19,19 @@ class AutomationWorkflowService:
         self.automation_service = automation_service
         self.automation_executor = automation_executor
 
-    def list_plans(self, db: Session, workspace_id: int | None = None) -> list[AutomationPlan]:
-        """Return plans newest-first, optionally scoped to a workspace."""
+    def list_plans(self, db: Session, workspace_id: int | None = None, limit: int = 50, offset: int = 0) -> list[AutomationPlan]:
+        """Return plans newest-first, optionally scoped to a workspace, with pagination."""
 
         query = db.query(AutomationPlan)
         if workspace_id is not None:
             query = query.filter(AutomationPlan.workspace_id == workspace_id)
-        return query.order_by(AutomationPlan.created_at.desc()).all()
+        return query.order_by(AutomationPlan.created_at.desc()).limit(limit).offset(offset).all()
+
+    def count_plans(self, db: Session, workspace_id: int | None = None) -> int:
+        query = db.query(AutomationPlan)
+        if workspace_id is not None:
+            query = query.filter(AutomationPlan.workspace_id == workspace_id)
+        return query.count()
 
     async def generate_plan(self, db: Session, workspace_id: int, objective: str) -> AutomationPlan:
         """Validate workspace parent then delegate plan generation."""

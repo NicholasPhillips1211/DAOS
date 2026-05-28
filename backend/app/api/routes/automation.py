@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies import get_db, get_pagination
 from app.core.auth import Principal, get_current_principal, require_workspace_role
 from app.models.automation import AutomationPlan
 from app.models.metadata import WorkspaceRole
@@ -18,15 +18,19 @@ automation_workflow_service = AutomationWorkflowService(automation_service, auto
 
 @router.get("", response_model=list[AutomationPlanRead])
 def list_plans(
+    response: Response,
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
     workspace_id: int | None = None,
+    pagination: dict = Depends(get_pagination),
 ) -> list[AutomationPlan]:
     """List automation plans newest-first, optionally scoped to one workspace."""
 
     if workspace_id is not None:
         require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
-    return automation_workflow_service.list_plans(db, workspace_id)
+    total = automation_workflow_service.count_plans(db, workspace_id)
+    response.headers["X-Total-Count"] = str(total)
+    return automation_workflow_service.list_plans(db, workspace_id, limit=pagination["limit"], offset=pagination["offset"])
 
 
 @router.post("/generate", response_model=AutomationPlanRead, status_code=201)

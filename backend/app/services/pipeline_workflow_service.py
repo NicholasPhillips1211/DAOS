@@ -17,8 +17,8 @@ class PipelineWorkflowService:
     def __init__(self, pipeline_service: PipelineService) -> None:
         self.pipeline_service = pipeline_service
 
-    def list_pipelines(self, db: Session, principal: Principal, workspace_id: int | None = None) -> list[Pipeline]:
-        """Return pipelines newest-first, optionally scoped to a workspace."""
+    def list_pipelines(self, db: Session, principal: Principal, workspace_id: int | None = None, limit: int = 50, offset: int = 0) -> list[Pipeline]:
+        """Return pipelines newest-first, optionally scoped to a workspace, with pagination."""
 
         if settings.auth_enabled and workspace_id is None:
             raise HTTPException(status_code=400, detail="workspace_id is required when auth is enabled")
@@ -26,7 +26,13 @@ class PipelineWorkflowService:
         if workspace_id is not None:
             require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
             query = query.filter(Pipeline.workspace_id == workspace_id)
-        return query.order_by(Pipeline.created_at.desc()).all()
+        return query.order_by(Pipeline.created_at.desc()).limit(limit).offset(offset).all()
+
+    def count_pipelines(self, db: Session, principal: Principal, workspace_id: int | None = None) -> int:
+        query = db.query(Pipeline)
+        if workspace_id is not None:
+            query = query.filter(Pipeline.workspace_id == workspace_id)
+        return query.count()
 
     def create_pipeline(self, db: Session, principal: Principal, *, workspace_id: int, name: str, description: str | None) -> Pipeline:
         """Create a pipeline after verifying its workspace parent and access policy."""

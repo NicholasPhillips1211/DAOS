@@ -24,3 +24,18 @@ def get_or_404(db: Session, model_class, model_id: int, model_name: str = None):
     if instance is None:
         raise HTTPException(status_code=404, detail=f"{model_name} not found")
     return instance
+
+
+def get_pagination(limit: int = 50, offset: int = 0) -> dict:
+    """Provide a small pagination helper for list endpoints.
+
+    - `limit` defaults to 50 and is capped at 1000.
+    - `offset` defaults to 0 and must be non-negative.
+    """
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+    if limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be <= 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be >= 0")
+    return {"limit": limit, "offset": offset}
