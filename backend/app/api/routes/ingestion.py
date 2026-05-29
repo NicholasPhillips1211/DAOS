@@ -7,13 +7,11 @@ from app.core.dependencies import get_db, get_or_404
 from app.models.metadata import Workspace
 from app.schemas.ingestion import IngestionUploadRead
 from app.services.audit_service import AuditService
-from app.services.ingestion_workflow_service import IngestionWorkflowService
+from app.services.ingestion_service import IngestionService
 from app.services.metadata_service import MetadataService
-from app.services.quality_service import QualityService
 
 router = APIRouter()
-quality_service = QualityService()
-ingestion_workflow_service = IngestionWorkflowService(quality_service)
+ingestion_service = IngestionService()
 audit_service = AuditService()
 metadata_service = MetadataService()
 RAW_STORAGE_ROOT = Path(__file__).resolve().parents[3] / "data" / "raw"
@@ -31,17 +29,14 @@ async def upload_dataset(
 
     get_or_404(db, Workspace, workspace_id)
 
-    ingestion_workflow_service.validate_dataset_name(dataset_name)
-    source_name = ingestion_workflow_service.resolve_source_name(file.filename, dataset_name)
-
     file_bytes = await file.read()
-    storage_path = ingestion_workflow_service.persist_file(RAW_STORAGE_ROOT, workspace_id, source_name, file_bytes)
-    dataset, job, report = ingestion_workflow_service.create_ingestion_records(
+    dataset, job, report, storage_path = ingestion_service.process_upload(
         db,
-        workspace_id,
-        dataset_name,
-        source_name,
-        storage_path,
+        raw_storage_root=RAW_STORAGE_ROOT,
+        workspace_id=workspace_id,
+        dataset_name=dataset_name,
+        file_name=file.filename,
+        file_bytes=file_bytes,
     )
 
     audit_service.log_event(
@@ -50,7 +45,7 @@ async def upload_dataset(
         actor=x_user_email or "system",
         resource_type="dataset",
         resource_id=dataset.id,
-        details=f"Uploaded {source_name} with quality score {job.quality_score}",
+        details=f"Uploaded {file.filename or dataset.name} with quality score {job.quality_score}",
         db=db,
     )
 

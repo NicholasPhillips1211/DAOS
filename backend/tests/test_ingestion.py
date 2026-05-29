@@ -49,6 +49,13 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
     assert query_body["rows"][0]["id"] == 1
     assert query_body["rows"][0]["amount"] == 10
 
+    datasets_query_response = client.post(
+        f"/api/v1/datasets/{body['dataset_id']}/query",
+        json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
+    )
+    assert datasets_query_response.status_code == 200
+    assert datasets_query_response.json()["row_count"] == 2
+
     stats_response = client.get(f"/api/v1/analytics/datasets/{body['dataset_id']}/statistics")
     assert stats_response.status_code == 200
     stats_body = stats_response.json()
