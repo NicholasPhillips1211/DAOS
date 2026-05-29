@@ -35,6 +35,17 @@ def create_insight(
 def dataset_statistics(dataset_id: int, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> DatasetStatisticsRead:
     """Return computed CSV statistics through the analytics workflow boundary."""
 
-    dataset, payload = analytics_workflow_service.dataset_statistics(db, dataset_id)
+    # First, load dataset metadata (no file IO) and verify access.
+    from app.models.metadata import Dataset
+
+    dataset = db.get(Dataset, dataset_id)
+    if dataset is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     require_workspace_role(db, dataset.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+
+    # Access validated — delegate the heavy work to the analytics workflow.
+    _, payload = analytics_workflow_service.dataset_statistics(db, dataset_id)
     return DatasetStatisticsRead(dataset_id=dataset_id, **payload)

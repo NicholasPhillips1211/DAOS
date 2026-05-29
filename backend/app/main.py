@@ -39,12 +39,11 @@ async def lifespan(_: FastAPI):
     yield
 
 
-import sys as _sys
 
 # During automated tests (pytest) we allow the application to import without
 # requiring `API_KEYS_CSV` to be set. For real runs, fail fast when auth is
 # enabled but no API keys are configured to avoid accidentally exposing the API.
-if settings.auth_enabled and not settings.api_keys_csv and "pytest" not in _sys.modules:
+if settings.auth_enabled and not settings.api_keys_csv and "pytest" not in sys.modules:
     raise RuntimeError("AUTH is enabled but `API_KEYS_CSV` / `api_keys_csv` is empty. Provide API keys or disable auth for local development.")
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
