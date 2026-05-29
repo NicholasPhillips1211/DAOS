@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_pagination
 from app.core.auth import Principal, get_current_principal
-from app.models.metadata import WorkspaceRole
 from app.models.pipeline import Pipeline, PipelineRun
 from app.schemas.pipeline import PipelineCreate, PipelineRead, PipelineRunRead, PipelineScheduleUpdate, PipelineVersionCreate
 from app.services.pipeline_service import PipelineService

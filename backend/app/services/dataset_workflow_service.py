@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_or_404

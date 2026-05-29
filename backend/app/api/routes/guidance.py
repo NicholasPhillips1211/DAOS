@@ -2,9 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.core.auth import Principal, get_current_principal, require_workspace_role
+from app.core.auth import Principal, get_current_principal
 from app.models.guidance import GuidancePlan
-from app.models.metadata import WorkspaceRole
 from app.schemas.guidance import GuidanceGenerateRequest, GuidancePlanRead
 from app.services.guidance_service import GuidanceService
 from app.services.guidance_workflow_service import GuidanceWorkflowService
