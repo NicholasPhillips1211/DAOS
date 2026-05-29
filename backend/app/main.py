@@ -1,8 +1,6 @@
 import logging
-import subprocess
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +10,7 @@ from app.core.error_handlers import register_error_handlers
 from app.core.logging_middleware import RequestLoggingMiddleware
 from app.core.security import SecurityHeadersMiddleware
 from app import models  # noqa: F401
+from app.tasks.queue import default_queue
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +29,12 @@ async def lifespan(_: FastAPI):
     (init container, CI job, or `python backend/scripts/run_migrations.py`).
     """
 
-    yield
+    # Start in-process task queue for background jobs used in Phase 2.
+    await default_queue.start()
+    try:
+        yield
+    finally:
+        await default_queue.stop()
 
 
 

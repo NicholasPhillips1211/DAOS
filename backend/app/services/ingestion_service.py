@@ -6,16 +6,14 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-from app.services.quality_service import QualityService
+from typing import Any, Optional
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from app.models.ingestion import DataQualityReport, IngestionJob
 from app.models.metadata import Dataset, DatasetState
@@ -53,7 +51,7 @@ class IngestionService:
             return "api"
         return "database"
 
-    def process_upload(
+    def persist_and_profile(
         self,
         raw_storage_root: Path,
         workspace_id: int,
@@ -208,6 +206,94 @@ class IngestionService:
         )
         return dataset, job, report, storage_path
 
+    async def create_ingestion_records_async(
+        self,
+        db: AsyncSession,
+        workspace_id: int,
+        dataset_name: str,
+        source_name: str,
+        storage_path: Path,
+    ) -> tuple[Dataset, IngestionJob, DataQualityReport]:
+        """Async variant of `create_ingestion_records` using `AsyncSession`.
+
+        The profiling is run in a thread to avoid blocking the event loop.
+        """
+        profile = await asyncio.to_thread(self.quality_service.profile_csv, storage_path)
+        profile["metadata"] = self._build_profile_metadata(profile, source_name, storage_path)
+
+        for attempt in range(1, self._max_db_attempts + 1):
+            try:
+                dataset = Dataset(
+                    workspace_id=workspace_id,
+                    name=dataset_name,
+                    source_type="file",
+                    state=DatasetState.raw,
+                    storage_path=str(storage_path),
+                )
+                db.add(dataset)
+                await db.flush()
+
+                report = DataQualityReport(
+                    dataset_id=dataset.id,
+                    summary_json=self.quality_service.render_summary_json(profile),
+                )
+                job = IngestionJob(
+                    workspace_id=workspace_id,
+                    dataset_id=dataset.id,
+                    source_name=source_name,
+                    source_type="file",
+                    status="completed",
+                    row_count=profile["row_count"],
+                    rejected_rows=profile["rejected_rows"],
+                    quality_score=profile["quality_score"],
+                )
+
+                db.add(report)
+                db.add(job)
+                await db.commit()
+                await db.refresh(dataset)
+                await db.refresh(report)
+                return dataset, job, report
+            except SQLAlchemyError as exc:
+                await db.rollback()
+                logger.warning(
+                    "ingestion_record_commit_retry workspace_id=%s source_name=%s attempt=%s error=%s",
+                    workspace_id,
+                    source_name,
+                    attempt,
+                    str(exc),
+                )
+                if attempt >= self._max_db_attempts:
+                    raise HTTPException(status_code=500, detail="Failed to finalize ingestion records") from exc
+
+        raise HTTPException(status_code=500, detail="Failed to finalize ingestion records")
+
+    async def process_upload_async(
+        self,
+        db: AsyncSession,
+        *,
+        raw_storage_root: Path,
+        workspace_id: int,
+        dataset_name: str,
+        file_name: str | None,
+        file_bytes: bytes,
+    ) -> tuple[Dataset, IngestionJob, DataQualityReport, Path]:
+        """Async variant of `process_upload` that persists the file and creates records."""
+
+        self.validate_dataset_name(dataset_name)
+        source_name = self.resolve_source_name(file_name, dataset_name)
+        # persist_file is IO-bound; run in thread
+        storage_path = await asyncio.to_thread(self.persist_file, raw_storage_root, workspace_id, source_name, file_bytes)
+
+        dataset, job, report = await self.create_ingestion_records_async(
+            db,
+            workspace_id,
+            dataset_name,
+            source_name,
+            storage_path,
+        )
+        return dataset, job, report, storage_path
+
     def _build_profile_metadata(self, profile: dict[str, Any], source_name: str, storage_path: Path) -> dict[str, Any]:
         """Attach operational metadata used by downstream lineage and AI workflows."""
 
@@ -236,3 +322,36 @@ class IngestionService:
             "schema": schema,
             "profile_fingerprint": fingerprint,
         }
+
+    def create_job_and_report_for_dataset(
+        self,
+        db: Session,
+        dataset: Dataset,
+        profile: dict[str, Any],
+    ) -> tuple[IngestionJob, DataQualityReport]:
+        """Create a `DataQualityReport` and `IngestionJob` for an existing dataset.
+
+        This is useful for background workers that compute profiles asynchronously
+        after the dataset row has already been created.
+        """
+
+        profile["metadata"] = self._build_profile_metadata(profile, dataset.storage_path, Path(dataset.storage_path))
+
+        report = DataQualityReport(dataset_id=dataset.id, summary_json=self.quality_service.render_summary_json(profile))
+        job = IngestionJob(
+            workspace_id=dataset.workspace_id,
+            dataset_id=dataset.id,
+            source_name=Path(dataset.storage_path).name,
+            source_type="file",
+            status="completed",
+            row_count=profile.get("row_count", 0),
+            rejected_rows=profile.get("rejected_rows", 0),
+            quality_score=profile.get("quality_score", 0),
+        )
+
+        db.add(report)
+        db.add(job)
+        db.commit()
+        db.refresh(report)
+        db.refresh(job)
+        return job, report

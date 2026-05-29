@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db
+from app.core.dependencies_async import get_db_async
 from app.schemas.metadata import MetadataEventRead
 from app.services.metadata_service import MetadataService
 from app.core.dependencies import get_pagination
@@ -13,29 +12,48 @@ metadata_service = MetadataService()
 
 
 @router.get("/events", response_model=list[MetadataEventRead])
-def list_metadata_events(
+async def list_metadata_events(
     workspace_id: int = Query(..., description="Workspace scope for metadata retrieval"),
     event_type: str | None = Query(default=None, description="Exact event type filter"),
     resource_type: str | None = Query(default=None, description="Resource type filter"),
     resource_id: int | None = Query(default=None, description="Resource id filter"),
-    db: Session = Depends(get_db),
+    db = Depends(get_db_async),
     pagination: dict = Depends(get_pagination),
     response: Response = None,
 ) -> list[MetadataEventRead]:
     """Expose queryable metadata events for lineage and workflow intelligence."""
 
-    total = metadata_service.count_events(db, workspace_id=workspace_id, event_type=event_type, resource_type=resource_type, resource_id=resource_id)
-    if response is not None:
-        response.headers["X-Total-Count"] = str(total)
+    # Support both async and sync DB sessions.
+    from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
 
-    events = metadata_service.list_events(
-        db,
-        workspace_id=workspace_id,
-        event_type=event_type,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        limit=pagination["limit"],
-    )
+    if isinstance(db, _AsyncSession):
+        total = await metadata_service.count_events_async(
+            db, workspace_id=workspace_id, event_type=event_type, resource_type=resource_type, resource_id=resource_id
+        )
+        if response is not None:
+            response.headers["X-Total-Count"] = str(total)
+
+        events = await metadata_service.list_events_async(
+            db,
+            workspace_id=workspace_id,
+            event_type=event_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            limit=pagination["limit"],
+        )
+    else:
+        total = metadata_service.count_events(db, workspace_id=workspace_id, event_type=event_type, resource_type=resource_type, resource_id=resource_id)
+        if response is not None:
+            response.headers["X-Total-Count"] = str(total)
+
+        events = metadata_service.list_events(
+            db,
+            workspace_id=workspace_id,
+            event_type=event_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            limit=pagination["limit"],
+        )
 
     return [
         MetadataEventRead(

@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Tuple, List, Dict
 
 import duckdb
+import asyncio
 
 
 class LakehouseService:
@@ -41,3 +42,11 @@ class LakehouseService:
             rows = rows[:max_rows]
 
         return columns, rows
+
+    async def query_csv_async(self, file_path: str | Path, sql: str, max_rows: int = 1000, timeout_seconds: float = 5.0) -> tuple[List[str], List[Dict[str, object]]]:
+        """Async wrapper around `query_csv` that runs the blocking work in a thread.
+
+        This lets FastAPI async endpoints call into the lakehouse safely without
+        blocking the event loop.
+        """
+        return await asyncio.to_thread(self.query_csv, file_path, sql, max_rows, timeout_seconds)

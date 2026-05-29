@@ -5,6 +5,8 @@ import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.governance import AuditEvent
 
@@ -99,3 +101,55 @@ class MetadataService:
         except json.JSONDecodeError:
             logger.warning("metadata_event_unparseable id=%s", event.id)
             return {"raw": event.details}
+
+    async def list_events_async(
+        self,
+        db: AsyncSession,
+        *,
+        workspace_id: int,
+        event_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        limit: int = 100,
+    ) -> list[AuditEvent]:
+        """Async variant of `list_events` using `AsyncSession`."""
+
+        stmt = select(AuditEvent).where(AuditEvent.workspace_id == workspace_id)
+        stmt = stmt.where(AuditEvent.event_type.like("metadata.%"))
+
+        if event_type:
+            stmt = stmt.where(AuditEvent.event_type == event_type)
+        if resource_type:
+            stmt = stmt.where(AuditEvent.resource_type == resource_type)
+        if resource_id is not None:
+            stmt = stmt.where(AuditEvent.resource_id == resource_id)
+
+        capped_limit = max(1, min(limit, 500))
+        stmt = stmt.order_by(AuditEvent.created_at.desc()).limit(capped_limit)
+
+        res = await db.execute(stmt)
+        return res.scalars().all()
+
+    async def count_events_async(
+        self,
+        db: AsyncSession,
+        *,
+        workspace_id: int,
+        event_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+    ) -> int:
+        """Async variant of `count_events` using `AsyncSession`."""
+
+        stmt = select(func.count()).select_from(AuditEvent).where(AuditEvent.workspace_id == workspace_id)
+        stmt = stmt.where(AuditEvent.event_type.like("metadata.%"))
+
+        if event_type:
+            stmt = stmt.where(AuditEvent.event_type == event_type)
+        if resource_type:
+            stmt = stmt.where(AuditEvent.resource_type == resource_type)
+        if resource_id is not None:
+            stmt = stmt.where(AuditEvent.resource_id == resource_id)
+
+        res = await db.execute(stmt)
+        return int(res.scalar_one())

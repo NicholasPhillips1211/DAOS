@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.metadata import Dataset, Workspace
 from app.models.visualization import Dashboard
 from app.services.lakehouse_service import LakehouseService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class WorkspaceWorkflowService:
@@ -49,6 +50,28 @@ class WorkspaceWorkflowService:
 
         try:
             columns, rows = self.lakehouse_service.query_csv(dataset.storage_path, sql)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Dataset file not found") from None
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Query failed: {exc}") from exc
+
+        return dataset, columns, rows
+
+    async def query_dataset_async(self, db: AsyncSession, dataset_id: int, sql: str) -> tuple[Dataset, list[str], list[dict[str, object]]]:
+        """Async variant that uses `AsyncSession` and the async lakehouse wrapper."""
+        if not sql.strip():
+            raise HTTPException(status_code=400, detail="SQL query is required")
+
+        dataset = await db.get(Dataset, dataset_id)
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        if not dataset.storage_path:
+            raise HTTPException(status_code=400, detail="Dataset has no storage path")
+        if self.lakehouse_service is None:
+            raise HTTPException(status_code=500, detail="Lakehouse service is not configured")
+
+        try:
+            columns, rows = await self.lakehouse_service.query_csv_async(dataset.storage_path, sql)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Dataset file not found") from None
         except Exception as exc:
