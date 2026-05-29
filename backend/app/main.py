@@ -3,7 +3,6 @@ import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,19 +22,14 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Apply database migrations on startup and keep shutdown minimal.
+    """Application lifespan hook.
 
-    We invoke Alembic through the project's Python environment as a subprocess
-    to avoid import-time conflicts with the local `backend/alembic` package.
-    If Alembic is unavailable or the call fails, fall back to leaving the
-    schema management to test fixtures or manual setup.
+    Alembic migrations are intentionally not run automatically in the app
+    process to avoid multi-replica migration races and hidden failures in
+    Kubernetes or other orchestrated environments. Run migrations separately
+    (init container, CI job, or `python backend/scripts/run_migrations.py`).
     """
 
-    backend_dir = Path(__file__).resolve().parents[1]
-    try:
-        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True, cwd=str(backend_dir))
-    except Exception:
-        logging.warning("Alembic upgrade failed or not available; skipping automatic migrations.")
     yield
 
 
