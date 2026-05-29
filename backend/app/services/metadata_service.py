@@ -65,6 +65,29 @@ class MetadataService:
         capped_limit = max(1, min(limit, 500))
         return query.order_by(AuditEvent.created_at.desc()).limit(capped_limit).all()
 
+    def count_events(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        event_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+    ) -> int:
+        """Return the total number of metadata events matching the given filters."""
+
+        query = db.query(AuditEvent).filter(AuditEvent.workspace_id == workspace_id)
+        query = query.filter(AuditEvent.event_type.like("metadata.%"))
+
+        if event_type:
+            query = query.filter(AuditEvent.event_type == event_type)
+        if resource_type:
+            query = query.filter(AuditEvent.resource_type == resource_type)
+        if resource_id is not None:
+            query = query.filter(AuditEvent.resource_id == resource_id)
+
+        return query.count()
+
     def parse_details(self, event: AuditEvent) -> dict[str, Any]:
         """Parse JSON details safely for API response rendering."""
 

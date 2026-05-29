@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.schemas.metadata import MetadataEventRead
 from app.services.metadata_service import MetadataService
+from app.core.dependencies import get_pagination
 
 router = APIRouter()
 metadata_service = MetadataService()
@@ -17,10 +18,15 @@ def list_metadata_events(
     event_type: str | None = Query(default=None, description="Exact event type filter"),
     resource_type: str | None = Query(default=None, description="Resource type filter"),
     resource_id: int | None = Query(default=None, description="Resource id filter"),
-    limit: int = Query(default=100, ge=1, le=500, description="Maximum events to return"),
     db: Session = Depends(get_db),
+    pagination: dict = Depends(get_pagination),
+    response: Response = None,
 ) -> list[MetadataEventRead]:
     """Expose queryable metadata events for lineage and workflow intelligence."""
+
+    total = metadata_service.count_events(db, workspace_id=workspace_id, event_type=event_type, resource_type=resource_type, resource_id=resource_id)
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
 
     events = metadata_service.list_events(
         db,
@@ -28,7 +34,7 @@ def list_metadata_events(
         event_type=event_type,
         resource_type=resource_type,
         resource_id=resource_id,
-        limit=limit,
+        limit=pagination["limit"],
     )
 
     return [
