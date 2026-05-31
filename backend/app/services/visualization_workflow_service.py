@@ -5,7 +5,8 @@ from dataclasses import asdict
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.metadata import Dataset
+from app.core.auth import Principal, require_workspace_role
+from app.models.metadata import Dataset, WorkspaceRole
 from app.schemas.visualization import ChartRecommendationRead
 from app.services.analytics_service import AnalyticsService
 from app.services.visualization_service import VisualizationService
@@ -18,7 +19,7 @@ class VisualizationWorkflowService:
         self.visualization_service = visualization_service
         self.analytics_service = analytics_service
 
-    def recommend_chart(self, db: Session, payload: object) -> ChartRecommendationRead:
+    def recommend_chart(self, db: Session, payload: object, principal: Principal) -> ChartRecommendationRead:
         """Load dataset statistics and transform them into a chart recommendation."""
 
         request = payload
@@ -30,6 +31,8 @@ class VisualizationWorkflowService:
         dataset = db.get(Dataset, dataset_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        # Enforce workspace authorization before reading dataset file
+        require_workspace_role(db, dataset.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
         if not dataset.storage_path:
             raise HTTPException(status_code=400, detail="Dataset has no storage path")
 

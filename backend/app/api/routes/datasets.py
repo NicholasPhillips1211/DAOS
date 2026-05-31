@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Header, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_pagination
+from app.core.auth import Principal, get_current_principal
 from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetCreate, DatasetQueryRequest, DatasetQueryResponse, DatasetRead
 from app.services.audit_service import AuditService
@@ -48,10 +49,11 @@ def query_dataset(
     payload: DatasetQueryRequest,
     x_user_email: str | None = Header(default=None, alias="X-User-Email"),
     db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
 ) -> DatasetQueryResponse:
     """Execute SQL against a dataset file through the app-facing dataset route."""
 
-    dataset, columns, rows = workspace_workflow_service.query_dataset(db, dataset_id, payload.sql)
+    dataset, columns, rows = workspace_workflow_service.query_dataset(db, dataset_id, payload.sql, principal)
 
     audit_service.log_event(
         dataset.workspace_id,

@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.metadata import Dataset, Workspace
+from app.core.auth import Principal, require_workspace_role
+from app.models.metadata import Dataset, Workspace, WorkspaceRole
 from app.models.visualization import Dashboard
 from app.services.lakehouse_service import LakehouseService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,7 @@ class WorkspaceWorkflowService:
         db.refresh(dashboard)
         return dashboard
 
-    def query_dataset(self, db: Session, dataset_id: int, sql: str) -> tuple[Dataset, list[str], list[dict[str, object]]]:
+    def query_dataset(self, db: Session, dataset_id: int, sql: str, principal: Principal) -> tuple[Dataset, list[str], list[dict[str, object]]]:
         """Resolve dataset metadata and execute SQL against its persisted CSV path."""
 
         if not sql.strip():
@@ -43,6 +44,8 @@ class WorkspaceWorkflowService:
         dataset = db.get(Dataset, dataset_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        # Enforce workspace authorization before performing any file I/O
+        require_workspace_role(db, dataset.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
         if not dataset.storage_path:
             raise HTTPException(status_code=400, detail="Dataset has no storage path")
         if self.lakehouse_service is None:
@@ -57,7 +60,7 @@ class WorkspaceWorkflowService:
 
         return dataset, columns, rows
 
-    async def query_dataset_async(self, db: AsyncSession, dataset_id: int, sql: str) -> tuple[Dataset, list[str], list[dict[str, object]]]:
+    async def query_dataset_async(self, db: AsyncSession, dataset_id: int, sql: str, principal: Principal) -> tuple[Dataset, list[str], list[dict[str, object]]]:
         """Async variant that uses `AsyncSession` and the async lakehouse wrapper."""
         if not sql.strip():
             raise HTTPException(status_code=400, detail="SQL query is required")
@@ -65,6 +68,8 @@ class WorkspaceWorkflowService:
         dataset = await db.get(Dataset, dataset_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        # Enforce workspace authorization before performing any file I/O
+        require_workspace_role(db, dataset.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
         if not dataset.storage_path:
             raise HTTPException(status_code=400, detail="Dataset has no storage path")
         if self.lakehouse_service is None:

@@ -14,6 +14,7 @@ from app.services.audit_service import AuditService
 from app.services.visualization_service import VisualizationService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
 from app.services.visualization_workflow_service import VisualizationWorkflowService
+from app.core.auth import Principal, get_current_principal
 
 router = APIRouter()
 visualization_service = VisualizationService()
@@ -59,7 +60,6 @@ def create_dashboard(
 
 
 @router.post("/recommend-chart", response_model=ChartRecommendationRead)
-def recommend_chart(payload: ChartRecommendationRequest, db: Session = Depends(get_db)) -> ChartRecommendationRead:
+def recommend_chart(payload: ChartRecommendationRequest, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> ChartRecommendationRead:
     """Recommend a chart type from the dataset's column shapes and goal."""
-
-    return visualization_workflow_service.recommend_chart(db, payload)
+    return visualization_workflow_service.recommend_chart(db, payload, principal)
