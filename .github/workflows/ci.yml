@@ -62,8 +62,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest httpx
+          pip install -e .[dev]
 
       - name: Run backend tests
         run: pytest tests -q
@@ -90,8 +89,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest httpx
+          pip install -e .[dev]
 
       - name: Run critical ingestion-to-dashboard smoke flow
         run: pytest tests/test_ingestion.py::test_csv_upload_creates_dataset_and_report -q
