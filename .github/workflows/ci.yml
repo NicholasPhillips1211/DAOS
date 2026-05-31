@@ -63,9 +63,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
-          # Alembic is declared in the backend dev extras, but install it explicitly
-          # to keep the workflow resilient if extras resolution changes.
-          pip install alembic
 
       - name: Run backend tests
         run: pytest tests -q
@@ -93,9 +90,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
-          # Alembic is declared in the backend dev extras, but install it explicitly
-          # to keep the workflow resilient if extras resolution changes.
-          pip install alembic
 
       - name: Run critical ingestion-to-dashboard smoke flow
         run: pytest tests/test_ingestion.py::test_csv_upload_creates_dataset_and_report -q
