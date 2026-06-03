@@ -4,11 +4,6 @@ import hashlib
 import json
 import logging
 import time
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
-
-from app.services.quality_service import QualityService
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,16 +17,6 @@ from app.models.metadata import Dataset, DatasetState
 from app.services.quality_service import QualityService
 
 logger = logging.getLogger("daos.ingestion")
-
-
-@dataclass(slots=True)
-class IngestionResult:
-    """Outcome of a batch ingestion run."""
-
-    dataset_id: int
-    raw_rows: int
-    rejected_rows: int
-    quality_score: float
 
 
 class IngestionService:
@@ -52,37 +37,6 @@ class IngestionService:
         if source_name.startswith("http"):
             return "api"
         return "database"
-
-    def process_upload(
-        self,
-        raw_storage_root: Path,
-        workspace_id: int,
-        source_name: str,
-        file_bytes: bytes,
-        quality_service: Optional[QualityService] = None,
-    ) -> IngestionResult:
-        """Persist uploaded bytes to workspace raw storage and run the quality profiler.
-
-        This helper intentionally does not create DB records; it returns a lightweight
-        `IngestionResult` suitable for higher-level workflow services to consume.
-        """
-
-        raw_storage_root.mkdir(parents=True, exist_ok=True)
-        storage_path = raw_storage_root / f"ws{workspace_id}_{source_name}"
-
-        temp_path = storage_path.with_suffix(f"{storage_path.suffix}.tmp")
-        temp_path.write_bytes(file_bytes)
-        temp_path.replace(storage_path)
-
-        qs = quality_service or QualityService()
-        profile = qs.profile_csv(storage_path)
-
-        return IngestionResult(
-            dataset_id=0,
-            raw_rows=profile.get("row_count", 0),
-            rejected_rows=profile.get("rejected_rows", 0),
-            quality_score=profile.get("quality_score", 0),
-        )
 
     def validate_dataset_name(self, dataset_name: str) -> None:
         """Reject blank dataset names early to avoid creating unlabeled records."""
