@@ -1,8 +1,7 @@
 import logging
-import subprocess
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,9 +29,8 @@ async def lifespan(_: FastAPI):
     (init container, CI job, or `python backend/scripts/run_migrations.py`).
     """
 
+
     yield
-
-
 
 # During automated tests (pytest) we allow the application to import without
 # requiring `API_KEYS_CSV` to be set. For real runs, fail fast when auth is

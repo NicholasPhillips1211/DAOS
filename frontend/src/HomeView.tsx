@@ -1,14 +1,81 @@
-import { Tooltip } from './Tooltip';
+import { cardClass, Tooltip } from './components/ui';
 
 type HomeViewProps = {
   onStartTour: () => void;
   onEnterWorkspace: () => void;
 };
 
+type FeatureCard = {
+  id: string;
+  badge: string;
+  title: string;
+  description: string;
+  tooltip: string;
+};
+
+const features: FeatureCard[] = [
+  {
+    id: 'ingestion-section',
+    badge: 'ING',
+    title: 'Data ingestion',
+    description: 'Upload CSV files, connect live databases, or sync APIs into an auditable workspace.',
+    tooltip: 'View ingestion options',
+  },
+  {
+    id: 'analysis-section',
+    badge: 'SQL',
+    title: 'Explore and analyze',
+    description: 'Write SQL, inspect profiles, and turn query results into dashboard-ready assets.',
+    tooltip: 'Try the SQL workflow',
+  },
+  {
+    id: 'automation-section',
+    badge: 'AI',
+    title: 'AI automation',
+    description: 'Generate operational plans with triggers, actions, and next steps from workspace signals.',
+    tooltip: 'Generate an automation plan',
+  },
+  {
+    id: 'collaboration-section',
+    badge: 'COM',
+    title: 'Collaborate',
+    description: 'Comment, share dashboards, and keep team decisions connected to workspace assets.',
+    tooltip: 'Review collaboration tools',
+  },
+  {
+    id: 'governance-section',
+    badge: 'GOV',
+    title: 'Governance',
+    description: 'Track access, audit events, lineage signals, and compliance-sensitive workflow activity.',
+    tooltip: 'Configure governance policies',
+  },
+  {
+    id: 'recommendations-section',
+    badge: 'REC',
+    title: 'Smart recommendations',
+    description: 'Surface missing metrics, quality issues, and optimization opportunities from workspace context.',
+    tooltip: 'View recommendations',
+  },
+];
+
+const quickStartSteps = [
+  {
+    title: 'Upload your data',
+    description: 'Use ingestion to upload a CSV and generate profile metadata.',
+  },
+  {
+    title: 'Explore your data',
+    description: 'Run SQL, preview results, and prepare the output for dashboards.',
+  },
+  {
+    title: 'Operationalize insights',
+    description: 'Create dashboards, share them with the team, and plan recurring automation.',
+  },
+];
+
 export function HomeView({ onStartTour, onEnterWorkspace }: HomeViewProps) {
   return (
     <main className="relative min-h-screen overflow-hidden text-slate-100">
-      {/* Background gradients */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-[-8rem] top-[-8rem] h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
         <div className="absolute right-[-5rem] top-20 h-80 w-80 rounded-full bg-amber-300/15 blur-3xl" />
@@ -16,196 +83,16 @@ export function HomeView({ onStartTour, onEnterWorkspace }: HomeViewProps) {
       </div>
 
       <section className="relative mx-auto w-full max-w-7xl px-6 py-8 lg:px-10 lg:py-16">
-        {/* Hero Section */}
-        <div className="rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-slate-950/80 to-slate-950/50 p-8 md:p-12 lg:p-16 shadow-[0_30px_120px_rgba(0,0,0,0.35)] backdrop-blur-xl mb-12">
-          <div className="max-w-3xl">
-            <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/90">Welcome to DAOS</p>
-            <h1 className="mt-4 text-5xl md:text-6xl font-bold tracking-tight text-white">
-              Move From Data To Decisions
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-slate-300 max-w-2xl">
-              DAOS is an intelligent workspace for data teams. Ingest, explore, automate, and share insights—all in one place. No more juggling separate tools.
-            </p>
+        <HeroPanel onEnterWorkspace={onEnterWorkspace} onStartTour={onStartTour} />
 
-            <div className="mt-10 flex flex-wrap gap-4">
-              <Tooltip content="Start a step-by-step walkthrough of DAOS features">
-                <button
-                  onClick={onStartTour}
-                  className="px-8 py-4 rounded-full bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 transition shadow-lg hover:shadow-xl"
-                >
-                  ✨ Take the Tour
-                </button>
-              </Tooltip>
-
-              <Tooltip content="Jump directly into your workspace">
-                <button
-                  onClick={onEnterWorkspace}
-                  className="px-8 py-4 rounded-full border-2 border-cyan-400/60 bg-white/5 text-white font-semibold hover:bg-white/10 transition"
-                >
-                  Enter Workspace →
-                </button>
-              </Tooltip>
-            </div>
-          </div>
+        <div className="mb-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {features.map((feature) => (
+            <FeatureCard key={feature.id} feature={feature} />
+          ))}
         </div>
 
-        {/* Key Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {/* Ingestion */}
-          <div
-            id="ingestion-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">📥</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Data Ingestion</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              Upload CSV files, connect live databases, or sync APIs. Your data is versioned, auditable, and immediately available for analysis.
-            </p>
-            <Tooltip content="View all ingestion options" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
+        <QuickStartPanel onStartTour={onStartTour} />
 
-          {/* Analysis */}
-          <div
-            id="analysis-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">📊</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Explore & Analyze</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              Write SQL queries, build interactive dashboards, and generate visualizations. All backed by a lakehouse that scales with your data.
-            </p>
-            <Tooltip content="Try the SQL editor" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Automation */}
-          <div
-            id="automation-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">⚡</div>
-            <h3 className="text-xl font-semibold text-white mb-2">AI Automation</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              Describe what you want automated. DAOS generates an actionable plan with triggers, actions, and next steps.
-            </p>
-            <Tooltip content="Generate your first automation plan" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Collaboration */}
-          <div
-            id="collaboration-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">💬</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Collaborate</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              Comment, share dashboards, and approve workflows. Built-in audit trails ensure accountability and compliance.
-            </p>
-            <Tooltip content="Invite team members" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Governance */}
-          <div
-            id="governance-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">🔐</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Governance</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              Role-based access control, data lineage, and compliance tracking. Enterprise-ready from day one.
-            </p>
-            <Tooltip content="Configure governance policies" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Recommendations */}
-          <div
-            id="recommendations-section"
-            className="rounded-2xl border border-white/10 bg-slate-950/65 p-6 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur hover:border-white/20 transition"
-          >
-            <div className="text-3xl mb-3">💡</div>
-            <h3 className="text-xl font-semibold text-white mb-2">Smart Recommendations</h3>
-            <p className="text-sm text-slate-300 leading-6">
-              DAOS learns from your workspace and suggests next steps: missing metrics, quality issues, or optimization opportunities.
-            </p>
-            <Tooltip content="View personalized suggestions" position="bottom">
-              <button className="mt-4 text-xs text-cyan-300 hover:text-cyan-200 font-medium">
-                Learn more →
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-
-        {/* Quick Start Section */}
-        <div className="rounded-2xl border border-white/10 bg-slate-950/65 p-8 md:p-10 shadow-[0_24px_90px_rgba(0,0,0,0.25)] backdrop-blur">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-6">Get Started In 3 Steps</h2>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500 text-slate-950 font-bold text-lg">
-                1
-              </div>
-              <h3 className="font-semibold text-white">Upload Your Data</h3>
-              <p className="text-sm text-slate-300">
-                Use the ingestion feature to upload a CSV file, connect a database, or sync an API. Your data is immediately available.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500 text-slate-950 font-bold text-lg">
-                2
-              </div>
-              <h3 className="font-semibold text-white">Explore Your Data</h3>
-              <p className="text-sm text-slate-300">
-                Write a SQL query, preview the schema, or generate visualizations. See patterns and anomalies at a glance.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500 text-slate-950 font-bold text-lg">
-                3
-              </div>
-              <h3 className="font-semibold text-white">Share Insights</h3>
-              <p className="text-sm text-slate-300">
-                Create a dashboard, share it with your team, and set up automation for recurring tasks. Done!
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-10 pt-8 border-t border-white/10 flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <p className="text-slate-400 text-sm">
-              💬 Have questions? Our guided tour walks you through every feature.
-            </p>
-            <Tooltip content="See the full walkthrough">
-              <button
-                onClick={onStartTour}
-                className="px-6 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition border border-white/20"
-              >
-                Start the Tour
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-
-        {/* Footer */}
         <footer className="mt-12 text-center text-sm text-slate-400">
           <p>
             Built on FastAPI, React, and PostgreSQL. Local LLM ready.{' '}
@@ -218,5 +105,95 @@ export function HomeView({ onStartTour, onEnterWorkspace }: HomeViewProps) {
         </footer>
       </section>
     </main>
+  );
+}
+
+function HeroPanel({
+  onEnterWorkspace,
+  onStartTour,
+}: {
+  onEnterWorkspace: () => void;
+  onStartTour: () => void;
+}) {
+  return (
+    <div className="mb-12 rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-slate-950/80 to-slate-950/50 p-8 shadow-[0_30px_120px_rgba(0,0,0,0.35)] backdrop-blur-xl md:p-12 lg:p-16">
+      <div className="max-w-3xl">
+        <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/90">Welcome to DAOS</p>
+        <h1 className="mt-4 text-5xl font-bold tracking-tight text-white md:text-6xl">
+          Move From Data To Decisions
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
+          DAOS is an operational analytics workspace for teams that need ingestion, SQL analysis, metadata,
+          automation, and dashboards in one flow.
+        </p>
+
+        <div className="mt-10 flex flex-wrap gap-4">
+          <Tooltip content="Start a step-by-step walkthrough of DAOS features">
+            <button
+              onClick={onStartTour}
+              className="rounded-full bg-cyan-500 px-8 py-4 font-semibold text-slate-950 shadow-lg transition hover:bg-cyan-400 hover:shadow-xl"
+            >
+              Take the tour
+            </button>
+          </Tooltip>
+
+          <Tooltip content="Jump directly into your workspace">
+            <button
+              onClick={onEnterWorkspace}
+              className="rounded-full border-2 border-cyan-400/60 bg-white/5 px-8 py-4 font-semibold text-white transition hover:bg-white/10"
+            >
+              Enter workspace
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeatureCard({ feature }: { feature: FeatureCard }) {
+  return (
+    <div id={feature.id} className={`${cardClass} p-6 transition hover:border-white/20`}>
+      <div className="mb-3 inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 text-xs font-semibold tracking-[0.18em] text-cyan-100">
+        {feature.badge}
+      </div>
+      <h3 className="mb-2 text-xl font-semibold text-white">{feature.title}</h3>
+      <p className="text-sm leading-6 text-slate-300">{feature.description}</p>
+      <Tooltip content={feature.tooltip} position="bottom">
+        <button className="mt-4 text-xs font-medium text-cyan-300 hover:text-cyan-200">Learn more</button>
+      </Tooltip>
+    </div>
+  );
+}
+
+function QuickStartPanel({ onStartTour }: { onStartTour: () => void }) {
+  return (
+    <div className={`${cardClass} p-8 md:p-10`}>
+      <h2 className="mb-6 text-2xl font-bold text-white md:text-3xl">Get Started In 3 Steps</h2>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        {quickStartSteps.map((step, index) => (
+          <div key={step.title} className="space-y-3">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500 text-lg font-bold text-slate-950">
+              {index + 1}
+            </div>
+            <h3 className="font-semibold text-white">{step.title}</h3>
+            <p className="text-sm text-slate-300">{step.description}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 sm:flex-row">
+        <p className="text-sm text-slate-400">The guided tour walks through the core workspace flow.</p>
+        <Tooltip content="See the full walkthrough">
+          <button
+            onClick={onStartTour}
+            className="rounded-full border border-white/20 bg-white/10 px-6 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+          >
+            Start the tour
+          </button>
+        </Tooltip>
+      </div>
+    </div>
   );
 }
