@@ -1,4 +1,4 @@
-from app.schemas.ingestion import IngestionUploadRead
+from app.schemas.ingestion import IngestionJobRead, IngestionUploadRead
 from app.schemas.analysis import ColumnStatistic, DatasetStatisticsRead, InsightCreate, InsightRead
 from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.schemas.dataset import DatasetCreate, DatasetRead
@@ -10,6 +10,7 @@ from app.schemas.workspace import MembershipCreate, MembershipRead, WorkspaceCre
 
 __all__ = [
     "IngestionUploadRead",
+    "IngestionJobRead",
     "InsightCreate",
     "InsightRead",
     "DatasetCreate",

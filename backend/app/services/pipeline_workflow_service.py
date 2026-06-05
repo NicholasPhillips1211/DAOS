@@ -3,10 +3,15 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_workspace_role
-from app.core.config import settings
+from app.core.auth import (
+    Principal,
+    WORKSPACE_READ_ROLES,
+    WORKSPACE_WRITE_ROLES,
+    require_workspace_role,
+    require_workspace_scope,
+)
 from app.core.dependencies import get_or_404
-from app.models.metadata import Workspace, WorkspaceRole
+from app.models.metadata import Workspace
 from app.models.pipeline import Pipeline, PipelineRun, PipelineStatus, PipelineVersion
 from app.services.pipeline_service import PipelineService
 
@@ -20,17 +25,18 @@ class PipelineWorkflowService:
     def list_pipelines(self, db: Session, principal: Principal, workspace_id: int | None = None, limit: int = 50, offset: int = 0) -> list[Pipeline]:
         """Return pipelines newest-first, optionally scoped to a workspace, with pagination."""
 
-        if settings.auth_enabled and workspace_id is None:
-            raise HTTPException(status_code=400, detail="workspace_id is required when auth is enabled")
+        require_workspace_scope(workspace_id)
         query = db.query(Pipeline)
         if workspace_id is not None:
-            require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+            require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
             query = query.filter(Pipeline.workspace_id == workspace_id)
         return query.order_by(Pipeline.created_at.desc()).limit(limit).offset(offset).all()
 
     def count_pipelines(self, db: Session, principal: Principal, workspace_id: int | None = None) -> int:
+        require_workspace_scope(workspace_id)
         query = db.query(Pipeline)
         if workspace_id is not None:
+            require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
             query = query.filter(Pipeline.workspace_id == workspace_id)
         return query.count()
 
@@ -38,7 +44,7 @@ class PipelineWorkflowService:
         """Create a pipeline after verifying its workspace parent and access policy."""
 
         get_or_404(db, Workspace, workspace_id)
-        require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+        require_workspace_role(db, workspace_id, principal, WORKSPACE_WRITE_ROLES)
         pipeline = Pipeline(workspace_id=workspace_id, name=name, description=description)
         db.add(pipeline)
         db.commit()
@@ -49,7 +55,7 @@ class PipelineWorkflowService:
         """Persist a schedule expression so the pipeline can run on a cadence."""
 
         pipeline = get_or_404(db, Pipeline, pipeline_id)
-        require_workspace_role(db, pipeline.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+        require_workspace_role(db, pipeline.workspace_id, principal, WORKSPACE_WRITE_ROLES)
         pipeline.schedule_cron = schedule_cron
         pipeline.status = PipelineStatus.scheduled if schedule_cron else PipelineStatus.draft
         db.add(pipeline)
@@ -61,7 +67,7 @@ class PipelineWorkflowService:
         """Store a normalized immutable version of a pipeline definition."""
 
         pipeline = get_or_404(db, Pipeline, pipeline_id)
-        require_workspace_role(db, pipeline.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+        require_workspace_role(db, pipeline.workspace_id, principal, WORKSPACE_WRITE_ROLES)
         try:
             normalized_definition = self.pipeline_service.validate_definition_json(definition_json)
         except ValueError as exc:
@@ -78,7 +84,7 @@ class PipelineWorkflowService:
         pipeline = db.get(Pipeline, pipeline_id)
         if pipeline is None:
             raise HTTPException(status_code=404, detail="Pipeline not found")
-        require_workspace_role(db, pipeline.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+        require_workspace_role(db, pipeline.workspace_id, principal, WORKSPACE_WRITE_ROLES)
         run = PipelineRun(pipeline_id=pipeline_id, status=PipelineStatus.running)
         db.add(run)
         db.commit()

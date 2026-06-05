@@ -24,15 +24,32 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
     body = response.json()
     assert body["workspace_id"] == workspace_id
     assert body["dataset_name"] == "sales"
+    assert body["job_id"] > 0
+    assert body["status"] == "completed"
+    assert body["finished_at"] is not None
     assert body["row_count"] == 2
     assert body["quality_score"] == 100
     assert body["rejected_rows"] == 0
     assert body["report_id"] > 0
 
+    job_response = client.get(f"/api/v1/ingestion/jobs/{body['job_id']}")
+    assert job_response.status_code == 200
+    job_body = job_response.json()
+    assert job_body["status"] == "completed"
+    assert job_body["dataset_id"] == body["dataset_id"]
+    assert job_body["source_name"] == "sales.csv"
+    assert job_body["finished_at"] is not None
+
+    job_list_response = client.get(f"/api/v1/ingestion/jobs?workspace_id={workspace_id}")
+    assert job_list_response.status_code == 200
+    assert job_list_response.headers["X-Total-Count"] == "1"
+    assert job_list_response.json()[0]["id"] == body["job_id"]
+
     quality_response = client.get(f"/api/v1/datasets/{body['dataset_id']}/quality")
     assert quality_response.status_code == 200
     quality_body = quality_response.json()
-    assert quality_body["metadata"]["profile_version"] == "1.1"
+    assert quality_body["metadata"]["profile_version"] == "1.2"
+    assert quality_body["metadata"]["ingestion_job_id"] == body["job_id"]
     assert quality_body["metadata"]["source_name"] == "sales.csv"
     assert quality_body["metadata"]["column_count"] == 2
     assert quality_body["metadata"]["profile_fingerprint"]

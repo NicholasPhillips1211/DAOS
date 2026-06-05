@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Collection, TypeVar
 
 from fastapi import Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.governance import AuditEvent
-from app.models.metadata import WorkspaceMembership, WorkspaceRole
+from app.models.metadata import Workspace, WorkspaceMembership, WorkspaceRole
+
+WORKSPACE_READ_ROLES = {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer}
+WORKSPACE_WRITE_ROLES = {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst}
+WORKSPACE_ADMIN_ROLES = {WorkspaceRole.owner, WorkspaceRole.admin}
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -79,12 +86,20 @@ def get_current_principal(
     return Principal(user_email=x_user_email)
 
 
-def require_workspace_role(db: Session, workspace_id: int, principal: Principal, allowed_roles: set[WorkspaceRole]) -> None:
+def require_workspace_role(
+    db: Session,
+    workspace_id: int,
+    principal: Principal,
+    allowed_roles: Collection[WorkspaceRole],
+) -> None:
     """Ensure the current principal is a member with one of the allowed roles.
 
     This centralizes workspace-scoped authorization so route handlers stay thin
     and the same RBAC rules apply consistently across the API surface.
     """
+
+    if db.get(Workspace, workspace_id) is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
 
     if not settings.auth_enabled:
         return
@@ -103,3 +118,33 @@ def require_workspace_role(db: Session, workspace_id: int, principal: Principal,
     if membership.role not in allowed_roles:
         _log_denied_access(db, workspace_id, principal, f"Insufficient workspace role: {membership.role}")
         raise HTTPException(status_code=403, detail="Insufficient workspace role")
+
+
+def require_workspace_scope(workspace_id: int | None) -> None:
+    """Reject unscoped workspace data lists when auth is enabled."""
+
+    if settings.auth_enabled and workspace_id is None:
+        raise HTTPException(status_code=400, detail="workspace_id is required when auth is enabled")
+
+
+def require_model_workspace_role(
+    db: Session,
+    model_class: type[T],
+    model_id: int,
+    principal: Principal,
+    allowed_roles: Collection[WorkspaceRole],
+    *,
+    model_name: str | None = None,
+) -> T:
+    """Load a workspace-owned model and enforce role access before callers use it."""
+
+    instance = db.get(model_class, model_id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail=f"{model_name or model_class.__name__} not found")
+
+    workspace_id = getattr(instance, "workspace_id", None)
+    if workspace_id is None:
+        raise HTTPException(status_code=500, detail=f"{model_name or model_class.__name__} is not workspace-scoped")
+
+    require_workspace_role(db, workspace_id, principal, allowed_roles)
+    return instance

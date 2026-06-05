@@ -35,6 +35,8 @@ class MLWorkflowService:
         dataset = db.get(Dataset, dataset_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        if dataset.workspace_id != workspace_id:
+            raise HTTPException(status_code=400, detail="Dataset does not belong to the requested workspace")
         if not dataset.storage_path:
             raise HTTPException(status_code=400, detail="Dataset has no storage path")
 

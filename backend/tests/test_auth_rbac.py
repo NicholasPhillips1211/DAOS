@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from app.core.config import settings
 
 
@@ -99,6 +101,96 @@ def test_rbac_allows_generate_for_member_and_blocks_admin_only_action(client) ->
         assert any(event["event_type"] == "workspace.created" for event in audit_events)
         assert any(event["event_type"] == "workspace.member_added" for event in audit_events)
         assert any(event["event_type"] == "security.access_denied" for event in audit_events)
+    finally:
+        settings.auth_enabled = original_enabled
+        settings.api_keys_csv = original_keys
+
+
+def test_core_data_routes_require_workspace_membership(client) -> None:
+    original_enabled = settings.auth_enabled
+    original_keys = settings.api_keys_csv
+    settings.auth_enabled = True
+    settings.api_keys_csv = "secret-key"
+    try:
+        owner_headers = {"X-API-Key": "secret-key", "X-User-Email": "owner@example.com"}
+        outsider_headers = {"X-API-Key": "secret-key", "X-User-Email": "outsider@example.com"}
+
+        workspace_response = client.post(
+            "/api/v1/workspaces",
+            json={"name": "protected-ws", "description": "rbac protected data"},
+            headers=owner_headers,
+        )
+        assert workspace_response.status_code == 201
+        workspace_id = workspace_response.json()["id"]
+
+        upload_response = client.post(
+            "/api/v1/ingestion/upload",
+            data={"workspace_id": workspace_id, "dataset_name": "sales"},
+            files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
+            headers=owner_headers,
+        )
+        assert upload_response.status_code == 201
+        dataset_id = upload_response.json()["dataset_id"]
+        job_id = upload_response.json()["job_id"]
+
+        blocked_upload = client.post(
+            "/api/v1/ingestion/upload",
+            data={"workspace_id": workspace_id, "dataset_name": "blocked"},
+            files={"file": ("blocked.csv", BytesIO(b"id\n1\n"), "text/csv")},
+            headers=outsider_headers,
+        )
+        assert blocked_upload.status_code == 403
+
+        blocked_jobs = client.get(f"/api/v1/ingestion/jobs?workspace_id={workspace_id}", headers=outsider_headers)
+        assert blocked_jobs.status_code == 403
+        blocked_job_detail = client.get(f"/api/v1/ingestion/jobs/{job_id}", headers=outsider_headers)
+        assert blocked_job_detail.status_code == 403
+
+        assert client.get("/api/v1/datasets", headers=owner_headers).status_code == 400
+        assert client.get(f"/api/v1/datasets?workspace_id={workspace_id}", headers=outsider_headers).status_code == 403
+        assert client.get(f"/api/v1/datasets/{dataset_id}/quality", headers=outsider_headers).status_code == 403
+
+        blocked_dataset_query = client.post(
+            f"/api/v1/datasets/{dataset_id}/query",
+            json={"sql": "SELECT id FROM dataset"},
+            headers=outsider_headers,
+        )
+        assert blocked_dataset_query.status_code == 403
+
+        blocked_lakehouse_query = client.post(
+            f"/api/v1/lakehouse/{dataset_id}/query",
+            json={"sql": "SELECT id FROM dataset"},
+            headers=outsider_headers,
+        )
+        assert blocked_lakehouse_query.status_code == 403
+
+        blocked_chart = client.post(
+            "/api/v1/visualizations/recommend-chart",
+            json={"dataset_id": dataset_id, "x_column": "id", "y_column": "amount", "goal": "compare"},
+            headers=outsider_headers,
+        )
+        assert blocked_chart.status_code == 403
+
+        assert client.get("/api/v1/visualizations/dashboards", headers=owner_headers).status_code == 400
+        blocked_dashboard_list = client.get(
+            f"/api/v1/visualizations/dashboards?workspace_id={workspace_id}",
+            headers=outsider_headers,
+        )
+        assert blocked_dashboard_list.status_code == 403
+
+        blocked_dashboard_create = client.post(
+            "/api/v1/visualizations/dashboards",
+            json={"workspace_id": workspace_id, "name": "Blocked", "description": "Should not create"},
+            headers=outsider_headers,
+        )
+        assert blocked_dashboard_create.status_code == 403
+
+        blocked_metadata = client.get(
+            "/api/v1/metadata/events",
+            params={"workspace_id": workspace_id},
+            headers=outsider_headers,
+        )
+        assert blocked_metadata.status_code == 403
     finally:
         settings.auth_enabled = original_enabled
         settings.api_keys_csv = original_keys

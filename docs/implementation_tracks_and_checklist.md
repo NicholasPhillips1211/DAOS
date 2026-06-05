@@ -23,7 +23,7 @@ This page is a direct transcription of the roadmap diagram (seven implementation
 
 - T3 — Ingest
   - Goals: Multi-format ingestion (CSV/JSON/Parquet), robust upload pipeline, quality v2, connectors, ingestion state machine, write artifacts to storage.
-  - Outputs: `IngestionService.process_upload()`, `IngestionResult`, artifact paths, quality profiler integration.
+  - Outputs: `IngestionWorkflowService.process_upload()`, durable ingestion jobs, artifact paths, quality profiler integration.
 
 - T4 — ML
   - Goals: Model selection (tree/forest), model registry (versions), SHAP explainability, predict API, drift monitoring.
@@ -103,7 +103,7 @@ These are the items I recommend tackling immediately and in Sprint 1 order.
 2. Auth: set `auth_enabled = True` default, implement JWT user flows, add `AUTH_*` env var checks in startup.
 3. Async DB: move `get_db` to `AsyncSession` and provide compatibility wrappers for blocking calls.
 4. Frontend secret removal: remove hard-coded `DEV_API_KEY` and use `VITE_API_KEY` build env; add dev guidelines for local run.
-5. Ingestion: implement `IngestionService.process_upload()` that persists artifact and calls `QualityService.profile_csv`.
+5. Ingestion: keep deepening `IngestionWorkflowService.process_upload()` with worker handoff after streamed artifact persistence and `QualityService.profile_csv`.
 6. SQL console: add DuckDB-backed simple executor for CSV artifacts with row-limit and timeout.
 7. Pagination: add `limit`/`offset` to list endpoints and `X-Total-Count` header.
 8. CI linting: add `ruff` + `mypy` job; add `pre-commit` config.

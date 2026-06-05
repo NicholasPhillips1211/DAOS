@@ -23,6 +23,8 @@ class BusinessWorkflowService:
         insight = db.get(Insight, insight_id)
         if insight is None:
             raise HTTPException(status_code=404, detail="Insight not found")
+        if insight.workspace_id != workspace_id:
+            raise HTTPException(status_code=400, detail="Insight does not belong to the requested workspace")
 
         summary, recommendations = self.business_translation_service.generate(insight, audience)
         translation = BusinessTranslation(

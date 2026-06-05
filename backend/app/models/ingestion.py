@@ -18,7 +18,7 @@ class IngestionJob(Base):
     dataset_id: Mapped[int | None] = mapped_column(ForeignKey("datasets.id", ondelete="SET NULL"))
     source_name: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quality_score: Mapped[int] = mapped_column(Integer, nullable=False, default=100)

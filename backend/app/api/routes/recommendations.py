@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from app.core.auth import Principal, WORKSPACE_READ_ROLES, get_current_principal, require_workspace_role
 from app.core.dependencies import get_db, get_pagination
-from app.core.auth import Principal, get_current_principal
 from app.models.recommendation import Recommendation
 from app.schemas.recommendation import RecommendationGenerateResponse, RecommendationRead
 from app.services.recommendation_service import RecommendationService
@@ -34,6 +34,8 @@ def list_recommendations(
     pagination: dict = Depends(get_pagination),
 ) -> list[Recommendation]:
     """Return previously generated recommendations for the workspace."""
+
+    require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
     total = workflow_service.count(db, workspace_id)
     response.headers["X-Total-Count"] = str(total)
     return workflow_service.list_paginated(db, workspace_id, principal, limit=pagination["limit"], offset=pagination["offset"])

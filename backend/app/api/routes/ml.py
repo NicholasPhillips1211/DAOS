@@ -1,12 +1,18 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import (
+    Principal,
+    WORKSPACE_WRITE_ROLES,
+    get_current_principal,
+    require_model_workspace_role,
+    require_workspace_role,
+)
 from app.core.dependencies import get_db
-from app.core.auth import Principal, get_current_principal, require_workspace_role
-from app.models.metadata import WorkspaceRole
-from app.schemas.ml import ModelTrainRequest, ModelTrainResponse, FeatureImportanceRead
+from app.models.metadata import Dataset
+from app.schemas.ml import FeatureImportanceRead, ModelTrainRequest, ModelTrainResponse
 from app.services.ml_service import MLService
 from app.services.ml_workflow_service import MLWorkflowService
 
@@ -24,7 +30,11 @@ def train_model(
 ) -> ModelTrainResponse:
     """Train and persist a small baseline model for the selected workspace dataset."""
 
-    require_workspace_role(db, payload.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+    require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_WRITE_ROLES)
+    dataset = require_model_workspace_role(db, Dataset, payload.dataset_id, principal, WORKSPACE_WRITE_ROLES, model_name="Dataset")
+    if dataset.workspace_id != payload.workspace_id:
+        raise HTTPException(status_code=400, detail="Dataset does not belong to the requested workspace")
+
     trained_model, training_result = ml_workflow_service.train_model(
         db,
         workspace_id=payload.workspace_id,

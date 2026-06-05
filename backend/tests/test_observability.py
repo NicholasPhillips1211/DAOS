@@ -12,5 +12,5 @@ def test_metrics_snapshot_tracks_requests_and_errors(client) -> None:
     assert payload["request_count"] >= 2
     assert payload["error_count"] >= 1
     assert "404" in payload["status_counts"]
-    assert any(path_entry["path"] == "/api/v1/health" for path_entry in payload["busiest_paths"])
+    assert any(request["path"] == "/api/v1/health" for request in payload["recent_requests"])
     assert any(err_type.startswith("http_") for err_type in payload["error_types"]) 

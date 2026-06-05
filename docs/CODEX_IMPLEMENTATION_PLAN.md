@@ -21,7 +21,9 @@ This plan keeps future Codex work aligned to the DAOS product identity: an AI-Po
 - Split the automation studio into focused header, plan summary, signals, recipe, and execution panels.
 - Reworked the home view into data-driven sections and cleaned guided-tour UI copy/positioning helpers.
 - Added feature components for workspace header, automation studio, collaboration, automation history, dashboard operations, and local AI bridge.
-- Removed backend lint blockers in `main.py`, `ingestion_service.py`, and `tests/conftest.py`.
+- Removed backend lint blockers in `main.py`, ingestion workflow code, and `tests/conftest.py`.
+- Hardened RBAC across workspace-scoped data routes.
+- Consolidated ingestion onto `IngestionWorkflowService`, removed the duplicate ingestion service, added queryable ingestion jobs, and streamed upload persistence.
 - Added `docs/ARCHITECTURE_REVIEW.md`.
 - Added `docs/TECHNICAL_DEBT_REGISTER.md`.
 - Validated backend lint, backend tests, frontend build, and local startup endpoints.
@@ -49,13 +51,18 @@ Exit criteria:
 
 Goal: make ingestion an observable workflow rather than request-bound upload handling.
 
-Tasks:
+Completed:
 
 - Choose one canonical ingestion workflow service.
 - Move route orchestration to that service.
 - Add durable ingestion job states.
 - Record failures, retries, timestamps, and metadata emission in one transactionally clear flow.
 - Replace full in-memory upload reads with staged streaming where practical.
+
+Remaining:
+
+- Move profiling and record finalization out of the API request path.
+- Add worker handoff, retry counters, resumable failure handling, and operational job metrics.
 
 Exit criteria:
 

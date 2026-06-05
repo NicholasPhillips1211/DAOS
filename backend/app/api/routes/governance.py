@@ -1,10 +1,17 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_pagination
-from app.core.auth import Principal, get_current_principal, require_workspace_role
+from app.core.auth import (
+    Principal,
+    WORKSPACE_ADMIN_ROLES,
+    WORKSPACE_READ_ROLES,
+    get_current_principal,
+    require_model_workspace_role,
+    require_workspace_role,
+)
 from app.models.governance import AuditEvent, DataMask
-from app.models.metadata import WorkspaceRole
+from app.models.metadata import Dataset
 from app.schemas.governance import AuditEventRead, DataMaskCreate, DataMaskRead
 from app.services.governance_workflow_service import GovernanceWorkflowService
 
@@ -22,7 +29,7 @@ def list_audit_events(
 ) -> list[AuditEvent]:
     """Expose audit events in reverse chronological order for workspace review."""
 
-    require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+    require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
     total = governance_workflow_service.count_audit_events(db, workspace_id)
     response.headers["X-Total-Count"] = str(total)
     return governance_workflow_service.list_audit_events_paginated(db, workspace_id, limit=pagination["limit"], offset=pagination["offset"])
@@ -32,7 +39,11 @@ def list_audit_events(
 def create_data_mask(payload: DataMaskCreate, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> DataMask:
     """Persist a dataset masking rule for a workspace with admin-level access."""
 
-    require_workspace_role(db, payload.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin})
+    require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_ADMIN_ROLES)
+    dataset = require_model_workspace_role(db, Dataset, payload.dataset_id, principal, WORKSPACE_READ_ROLES, model_name="Dataset")
+    if dataset.workspace_id != payload.workspace_id:
+        raise HTTPException(status_code=400, detail="Dataset does not belong to the requested workspace")
+
     return governance_workflow_service.create_data_mask(
         db,
         workspace_id=payload.workspace_id,

@@ -23,6 +23,9 @@ export function UploadResultPanel({ wizard }: UploadResultPanelProps) {
               Quality score: {wizard.uploadResult.quality_score}% - {wizard.uploadResult.row_count} rows -{' '}
               {wizard.uploadResult.rejected_rows} rejected
             </p>
+            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-emerald-50/70">
+              Job #{wizard.uploadResult.job_id} - {wizard.uploadResult.status}
+            </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-slate-300">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Next move</p>

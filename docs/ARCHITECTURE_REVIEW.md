@@ -6,7 +6,7 @@ DAOS is currently a FastAPI + React operational analytics scaffold with good rou
 
 Ingestion -> Dataset Profiling -> Metadata Generation -> SQL Analysis -> AI Insight Generation -> Dashboard Operationalization.
 
-This review covers the architecture as implemented in the repository after the stabilization and frontend cleanup passes.
+This review covers the architecture as implemented in the repository after the stabilization, RBAC, frontend cleanup, and Track 2 ingestion consolidation passes.
 
 ## Validation Summary
 
@@ -14,8 +14,8 @@ This review covers the architecture as implemented in the repository after the s
 | --- | --- | --- |
 | Backend install | `.\.venv\Scripts\python.exe -m pip install -e .\backend[dev]` | Passed after sandbox escalation; installed declared backend runtime and dev dependencies. |
 | Backend lint | `.\.venv\Scripts\python.exe -m ruff check backend\app backend\tests` | Passed. |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 28 tests. |
-| Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503 kB JS asset. |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 29 tests. |
+| Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503.42 kB JS asset. |
 | Backend startup | `AUTH_ENABLED=false .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000` | Passed; `/api/v1/health` returned `{"status":"ok","service":"daos-backend"}`. |
 | Frontend startup | `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | Passed; `http://127.0.0.1:5173` returned HTTP 200. |
 
@@ -66,18 +66,17 @@ The root frontend app is now a shell:
 
 Implemented flow:
 
-- `POST /api/v1/ingestion/upload` validates workspace existence.
-- The route reads the upload bytes, delegates persistence/profiling/record creation to `IngestionService`, then emits audit and metadata events.
-- `IngestionService` stores a workspace-scoped raw CSV file, profiles it through `QualityService`, creates `Dataset`, `IngestionJob`, and `DataQualityReport` records, and adds profile metadata including schema summary and profile fingerprint.
-- Tests cover successful upload, missing workspace, non-CSV rejection, blank dataset name rejection, quality report retrieval, and queryability.
+- `POST /api/v1/ingestion/upload` validates workspace access through RBAC, then delegates the ingestion lifecycle to `IngestionWorkflowService`.
+- `IngestionWorkflowService` creates a durable `IngestionJob`, streams the uploaded CSV to workspace-scoped raw storage, profiles it through `QualityService`, creates `Dataset` and `DataQualityReport` records, and transitions the job to `completed` or `failed`.
+- `GET /api/v1/ingestion/jobs` and `GET /api/v1/ingestion/jobs/{job_id}` expose job state after enforcing workspace access.
+- Successful and failed ingestion attempts emit audit and metadata events, including the ingestion job id.
+- Tests cover successful upload, missing workspace, non-CSV rejection, blank dataset name rejection, quality report retrieval, queryability, job state retrieval, failure state recording, and RBAC on job access.
 
 Gaps:
 
-- Uploads are read fully into memory in the API request.
 - Only CSV is supported.
-- Ingestion is synchronous and request-bound.
-- `ingestion_workflow_service.py` duplicates much of `ingestion_service.py` and is not wired into the upload route.
-- Retry handling exists for file and DB writes, but there is no durable async retry state.
+- Ingestion is still synchronous and request-bound; the job lifecycle is durable, but processing is not yet handed off to a worker.
+- Retry handling exists for file and DB writes, but retries are still in-process and not yet backed by durable worker retry state.
 
 ### Dataset Registry And Metadata
 
@@ -148,8 +147,8 @@ Implemented flow:
 
 Gaps:
 
-- Metrics endpoint, OpenTelemetry tracing, worker/job observability, and alert-ready error tracking are not yet implemented.
-- Workflow status is not consistently modeled across ingestion, query, dashboard, and AI operations.
+- Metrics endpoint exists, but OpenTelemetry tracing, worker observability, and alert-ready error tracking are not yet implemented.
+- Ingestion workflow status is now modeled through queryable jobs, but query, dashboard, and AI operations still need consistent workflow-status models.
 
 ## Service Classification
 
@@ -159,16 +158,16 @@ Gaps:
 | Workflow services | `automation_workflow_service.py`, `business_workflow_service.py`, `collaboration_workflow_service.py`, `dataset_workflow_service.py`, `governance_workflow_service.py`, `guidance_workflow_service.py`, `ingestion_workflow_service.py`, `ml_workflow_service.py`, `pipeline_workflow_service.py`, `recommendation_workflow_service.py`, `visualization_workflow_service.py`, `workspace_workflow_service.py` |
 | Cross-cutting / infrastructure | `audit_service.py`, `backend/app/core/*` middleware, config, auth, database, retry, error handling, and observability utilities |
 
-The classification is useful, but several workflow services are thin and some are not wired as the canonical orchestration path. The next backend maturity step should consolidate duplicate services and make workflow services own durable multi-step operations.
+The classification is useful, but several workflow services are still thin. The next backend maturity step should make workflow services own durable multi-step operations with worker handoff and status records.
 
 ## Oversized Files
 
 | File | Lines | Review |
 | --- | ---: | --- |
 | `frontend/src/features/ingestion/hooks/useIngestionWizard.ts` | 357 | Owns the full ingestion workflow state; easier to read than the prior monolith, but still the next frontend simplification target. |
-| `backend/app/services/automation_service.py` | 389 | Largest backend service; likely mixes provider calling, fallback generation, execution, and persistence formatting. |
+| `backend/app/services/automation_service.py` | 454 | Largest backend service; mixes provider calling, fallback generation, execution, and persistence formatting. |
+| `backend/app/services/ingestion_workflow_service.py` | 427 | Canonical ingestion workflow; owns job state, streaming file persistence, profiling, audit, and metadata emission. Should be split once worker handoff is introduced. |
 | `frontend/src/HomeView.tsx` | 199 | Data-driven presentational component; lower risk than workflow-heavy files. |
-| `backend/app/services/ingestion_service.py` | 164 | Improved by removing a shadowed legacy upload helper; still overlaps with `ingestion_workflow_service.py`. |
 | `frontend/src/features/workspace/hooks/useDashboardWorkflow.ts` | 163 | Focused dashboard orchestration; acceptable size but should gain tests before deeper dashboard operationalization. |
 | `frontend/src/GuidedTour.tsx` | 138 | Extracted helper logic and cleaned UI copy; needs visual smoke coverage rather than more splitting. |
 
@@ -185,7 +184,7 @@ The classification is useful, but several workflow services are thin and some ar
 ## Architecture Risks
 
 - Metadata is still event-like, not yet the platform nervous system.
-- Ingestion is synchronous, CSV-only, and memory-bound at upload time.
+- Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
 - SQL analytics lacks query-history and lineage models.
 - AI features are not yet systematically grounded in DAOS metadata.
 - Dashboards are records and UI workflows, not operational assets with dependencies, ownership, usage, and impact analysis.
@@ -194,7 +193,7 @@ The classification is useful, but several workflow services are thin and some ar
 
 ## Next Implementation Priorities
 
-1. Consolidate ingestion into one canonical workflow service, add an ingestion job state model, and move long-running work out of the request path.
+1. Move canonical ingestion work out of the request path through a worker/job runner and durable retry state.
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
 3. Implement first-class metadata architecture: metadata repository, event emitter, schema registry, lineage records, usage events, and audit event integration.
 4. Add query history, saved queries, execution metrics, dataset dependency tracking, and metadata emission for SQL workflows.

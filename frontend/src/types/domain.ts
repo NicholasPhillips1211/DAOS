@@ -96,16 +96,20 @@ export type WorkspaceSummaryRead = {
 };
 
 export type IngestionUploadRead = {
+  job_id: number;
   dataset_id: number;
   workspace_id: number;
   dataset_name: string;
   state: string;
+  status: string;
   quality_score: number;
   row_count: number;
   rejected_rows: number;
   storage_path: string;
   report_id: number;
+  error_message?: string | null;
   created_at: string;
+  finished_at?: string | null;
 };
 
 export type QueryResult = {

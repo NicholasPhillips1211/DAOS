@@ -36,6 +36,8 @@ def test_ingestion_emits_queryable_metadata_event(client) -> None:
     assert event["event_type"] == "metadata.ingestion.profile_created"
     assert event["resource_type"] == "dataset"
     assert event["resource_id"] == upload_body["dataset_id"]
+    assert event["details"]["job_id"] == upload_body["job_id"]
     assert event["details"]["dataset_name"] == "sales"
     assert event["details"]["row_count"] == 2
     assert event["details"]["quality_score"] == 100
+    assert event["details"]["status"] == "completed"

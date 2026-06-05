@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
+from app.core.auth import (
+    Principal,
+    WORKSPACE_READ_ROLES,
+    WORKSPACE_WRITE_ROLES,
+    get_current_principal,
+    require_workspace_role,
+    require_workspace_scope,
+)
 from app.core.dependencies import get_db, get_pagination
-from app.core.auth import Principal, get_current_principal, require_workspace_role
 from app.models.automation import AutomationPlan
-from app.models.metadata import WorkspaceRole
 from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.services.automation_service import AutomationService, AutomationExecutor
 from app.services.automation_workflow_service import AutomationWorkflowService
@@ -26,8 +32,9 @@ def list_plans(
 ) -> list[AutomationPlan]:
     """List automation plans newest-first, optionally scoped to one workspace."""
 
+    require_workspace_scope(workspace_id)
     if workspace_id is not None:
-        require_workspace_role(db, workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+        require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
     total = automation_workflow_service.count_plans(db, workspace_id)
     response.headers["X-Total-Count"] = str(total)
     return automation_workflow_service.list_plans(db, workspace_id, limit=pagination["limit"], offset=pagination["offset"])
@@ -41,7 +48,7 @@ async def generate_plan(
 ) -> AutomationPlan:
     """Generate and persist an automation plan for a workspace objective."""
 
-    require_workspace_role(db, payload.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+    require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_WRITE_ROLES)
     return await automation_workflow_service.generate_plan(db, payload.workspace_id, payload.objective)
 
 
@@ -50,7 +57,7 @@ def get_plan(plan_id: int, db: Session = Depends(get_db), principal: Principal =
     """Fetch a stored automation plan by id."""
 
     plan = automation_workflow_service.get_plan_or_404(db, plan_id)
-    require_workspace_role(db, plan.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst, WorkspaceRole.viewer})
+    require_workspace_role(db, plan.workspace_id, principal, WORKSPACE_READ_ROLES)
     return plan
 
 
@@ -59,6 +66,6 @@ def execute_plan(plan_id: int, db: Session = Depends(get_db), principal: Princip
     """Execute the automation plan actions and update the plan with results."""
 
     plan = automation_workflow_service.get_plan_or_404(db, plan_id)
-    require_workspace_role(db, plan.workspace_id, principal, {WorkspaceRole.owner, WorkspaceRole.admin, WorkspaceRole.analyst})
+    require_workspace_role(db, plan.workspace_id, principal, WORKSPACE_WRITE_ROLES)
 
     return automation_workflow_service.execute_plan(db, plan)

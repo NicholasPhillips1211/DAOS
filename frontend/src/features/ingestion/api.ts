@@ -9,12 +9,12 @@ export async function listWorkspaceDatasets(
   userEmail: string,
   workspaceId: number,
 ): Promise<DatasetRecord[]> {
-  const response = await fetch(`${apiBase}/datasets`, {
+  const response = await fetch(`${apiBase}/datasets?workspace_id=${workspaceId}`, {
     headers: buildApiHeaders(userEmail, false),
   });
   assertOk(response, 'Dataset list failed');
   const items = (await response.json()) as DatasetRecord[];
-  return items.filter((item) => item.workspace_id === workspaceId).slice(0, 4);
+  return items.slice(0, 4);
 }
 
 /**

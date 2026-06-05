@@ -45,12 +45,24 @@ def test_collaboration_and_governance_endpoints(client) -> None:
     assert "comment.created" in types
     assert "share.created" in types
 
+    dataset_resp = client.post(
+        "/api/v1/datasets",
+        json={
+            "workspace_id": workspace_id,
+            "name": "customer-data",
+            "source_type": "file",
+            "storage_path": None,
+        },
+    )
+    assert dataset_resp.status_code == 201
+    dataset_id = dataset_resp.json()["id"]
+
     # create a data mask
     mask_resp = client.post(
         "/api/v1/governance/masks",
         json={
             "workspace_id": workspace_id,
-            "dataset_id": 1,
+            "dataset_id": dataset_id,
             "column_name": "email",
             "mask_type": "redact",
         },

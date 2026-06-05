@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.governance import AuditEvent, DataMask
-from app.models.metadata import Workspace
+from app.models.metadata import Dataset, Workspace
 
 
 class GovernanceWorkflowService:
@@ -39,6 +39,11 @@ class GovernanceWorkflowService:
 
         if db.get(Workspace, workspace_id) is None:
             raise HTTPException(status_code=404, detail="Workspace not found")
+        dataset = db.get(Dataset, dataset_id)
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        if dataset.workspace_id != workspace_id:
+            raise HTTPException(status_code=400, detail="Dataset does not belong to the requested workspace")
 
         mask = DataMask(
             workspace_id=workspace_id,

@@ -8,7 +8,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db, get_or_404
+from app.core.auth import Principal, WORKSPACE_READ_ROLES, get_current_principal, require_model_workspace_role
+from app.core.dependencies import get_db
 from app.models.ingestion import DataQualityReport
 from app.models.metadata import Dataset
 from app.schemas.quality import DataProfileRead, QualityReportRead
@@ -19,10 +20,14 @@ quality_service = QualityService()
 
 
 @router.get("/{dataset_id}/quality", response_model=QualityReportRead)
-def get_quality_report(dataset_id: int, db: Session = Depends(get_db)) -> QualityReportRead:
+def get_quality_report(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> QualityReportRead:
     """Return the stored quality report created during ingestion."""
 
-    get_or_404(db, Dataset, dataset_id)
+    require_model_workspace_role(db, Dataset, dataset_id, principal, WORKSPACE_READ_ROLES, model_name="Dataset")
 
     report = (
         db.query(DataQualityReport)
@@ -50,10 +55,14 @@ def get_quality_report(dataset_id: int, db: Session = Depends(get_db)) -> Qualit
 
 
 @router.get("/{dataset_id}/profile", response_model=DataProfileRead)
-def profile_dataset(dataset_id: int, db: Session = Depends(get_db)) -> DataProfileRead:
+def profile_dataset(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> DataProfileRead:
     """Run a live re-profile of the dataset file and return fresh quality metrics."""
 
-    dataset = get_or_404(db, Dataset, dataset_id)
+    dataset = require_model_workspace_role(db, Dataset, dataset_id, principal, WORKSPACE_READ_ROLES, model_name="Dataset")
 
     if not dataset.storage_path:
         raise HTTPException(status_code=400, detail="Dataset has no storage path for profiling")

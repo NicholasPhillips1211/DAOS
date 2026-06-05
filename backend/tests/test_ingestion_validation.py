@@ -16,6 +16,14 @@ def test_upload_rejects_non_csv(client) -> None:
     body = response.json()
     assert "Only CSV uploads are supported" in body["error"]["message"]
 
+    jobs_response = client.get(f"/api/v1/ingestion/jobs?workspace_id={workspace_id}")
+    assert jobs_response.status_code == 200
+    jobs = jobs_response.json()
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "failed"
+    assert jobs[0]["source_name"] == "sales.json"
+    assert "Only CSV uploads are supported" in jobs[0]["error_message"]
+
 
 def test_upload_rejects_blank_dataset_name(client) -> None:
     workspace_response = client.post("/api/v1/workspaces", json={"name": "ingestion-name", "description": "validation tests"})
@@ -31,3 +39,11 @@ def test_upload_rejects_blank_dataset_name(client) -> None:
     assert response.status_code == 400
     body = response.json()
     assert body["error"]["message"] == "Dataset name is required"
+
+    jobs_response = client.get(f"/api/v1/ingestion/jobs?workspace_id={workspace_id}")
+    assert jobs_response.status_code == 200
+    jobs = jobs_response.json()
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "failed"
+    assert jobs[0]["source_name"] == "sales.csv"
+    assert jobs[0]["error_message"] == "Dataset name is required"
