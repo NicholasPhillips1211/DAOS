@@ -74,3 +74,28 @@ class MetadataAIContextRecordRead(BaseModel):
     actor: str | None
     context: dict[str, Any]
     created_at: datetime
+
+
+class AIContextBuildRequest(BaseModel):
+    """Request a reusable AI grounding snapshot for a workspace objective."""
+
+    workspace_id: int
+    objective: str | None = None
+
+
+class AIContextBuildResponse(BaseModel):
+    """Return the persisted AI context record and its grounded payload."""
+
+    id: int
+    workspace_id: int
+    context_type: str
+    resource_type: str | None
+    resource_id: int | None
+    actor: str | None
+    objective: str | None
+    summary: str
+    confidence_score: float
+    sources: list[str]
+    recommended_next_actions: list[str]
+    context: dict[str, Any]
+    created_at: datetime

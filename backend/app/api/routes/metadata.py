@@ -7,16 +7,20 @@ from app.core.auth import Principal, WORKSPACE_READ_ROLES, get_current_principal
 from app.core.dependencies import get_db
 from app.core.dependencies import get_pagination
 from app.schemas.metadata import (
+    AIContextBuildRequest,
+    AIContextBuildResponse,
     MetadataAIContextRecordRead,
     MetadataEventRead,
     MetadataLineageRecordRead,
     MetadataSchemaRecordRead,
     MetadataUsageEventRead,
 )
+from app.services.ai_context_builder_service import AIContextBuilderService
 from app.services.metadata_service import MetadataService
 
 router = APIRouter()
 metadata_service = MetadataService()
+ai_context_builder_service = AIContextBuilderService(metadata_service)
 
 
 @router.get("/events", response_model=list[MetadataEventRead])
@@ -181,6 +185,43 @@ def list_metadata_usage(
         )
         for record in records
     ]
+
+
+@router.post("/ai-context/build", response_model=AIContextBuildResponse, status_code=201)
+def build_metadata_ai_context(
+    payload: AIContextBuildRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> AIContextBuildResponse:
+    """Build and persist a reusable AI grounding snapshot for a workspace.
+
+    The route only validates access and formats the response; lifecycle evidence
+    gathering lives in `AIContextBuilderService` so other AI features can reuse
+    the same modular context builder.
+    """
+
+    require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_READ_ROLES)
+    result = ai_context_builder_service.build_workspace_context(
+        db,
+        workspace_id=payload.workspace_id,
+        objective=payload.objective,
+        actor=principal.user_email,
+    )
+    return AIContextBuildResponse(
+        id=result.record.id,
+        workspace_id=result.record.workspace_id,
+        context_type=result.record.context_type,
+        resource_type=result.record.resource_type,
+        resource_id=result.record.resource_id,
+        actor=result.record.actor,
+        objective=result.context.get("objective"),
+        summary=result.context["summary"],
+        confidence_score=result.context["confidence_score"],
+        sources=result.context["sources"],
+        recommended_next_actions=result.context["recommended_next_actions"],
+        context=result.context,
+        created_at=result.record.created_at,
+    )
 
 
 @router.get("/ai-context", response_model=list[MetadataAIContextRecordRead])

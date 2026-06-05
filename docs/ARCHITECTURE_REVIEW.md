@@ -14,7 +14,7 @@ This review covers the architecture as implemented in the repository after the s
 | --- | --- | --- |
 | Backend install | `.\.venv\Scripts\python.exe -m pip install -e .\backend[dev]` | Passed after sandbox escalation; installed declared backend runtime and dev dependencies. |
 | Backend lint | `.\.venv\Scripts\python.exe -m ruff check backend\app backend\tests` | Passed. |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 33 tests. |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 34 tests. |
 | Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503.42 kB JS asset. |
 | Backend startup | `AUTH_ENABLED=false .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000` | Passed; `/api/v1/health` returned `{"status":"ok","service":"daos-backend"}`. |
 | Frontend startup | `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | Passed; `http://127.0.0.1:5173` returned HTTP 200. |
@@ -88,12 +88,13 @@ Implemented flow:
 - `GET /api/v1/metadata/events` can query metadata events.
 - `MetadataRepository` provides first-class persistence boundaries for schema, lineage, usage, and AI context records.
 - `GET /api/v1/metadata/schemas`, `/lineage`, `/usage`, and `/ai-context` expose lifecycle metadata with workspace RBAC.
+- `POST /api/v1/metadata/ai-context/build` creates reusable workspace context from the full management information lifecycle.
 - Successful ingestion records a dataset schema snapshot, ingestion-job-to-dataset lineage, collection usage, and dataset-profile AI context.
 
 Gaps:
 
 - Metadata ownership, stewardship, classification, and freshness records are not implemented yet.
-- SQL, dashboard, AI, alert, and workflow metadata are only partially modeled.
+- SQL, dashboard, alert, and workflow metadata are only partially modeled.
 - Dashboard dependency records are not yet implemented as explicit metadata assets.
 
 ### Information Analysis
@@ -120,13 +121,13 @@ Implemented flow:
 - Automation records can be generated and executed.
 - Automation generation records an AI context snapshot grounded in the generated plan payload.
 - Dataset ingestion records dataset-profile AI context for downstream AI grounding.
+- The AI context builder assembles workspace-level context with lifecycle sections, sources, confidence, and recommended next actions.
 - Tests cover automation behavior.
 
 Gaps:
 
-- AI context records exist, but there is not yet a reusable context builder.
-- Outputs do not consistently include source assets, affected assets, confidence, reasoning summary, and next action in a platform-wide format.
-- Automation is useful, but it risks being generic unless it is bound to metadata, lineage, dataset profiles, query history, dashboard dependencies, and governance state.
+- Generated AI outputs do not yet consistently include reasoning summary and affected assets.
+- Automation generation still builds its own signal snapshot instead of consuming the reusable AI context builder.
 
 ### Information Operationalization
 
@@ -165,7 +166,7 @@ Gaps:
 
 | Classification | Services |
 | --- | --- |
-| Domain services | `analytics_service.py`, `automation_service.py`, `business_service.py`, `guidance_service.py`, `lakehouse_service.py`, `metadata_service.py`, `ml_service.py`, `pipeline_service.py`, `quality_service.py`, `recommendation_service.py`, `visualization_service.py`, `workspace_management_service.py` |
+| Domain services | `ai_context_builder_service.py`, `analytics_service.py`, `automation_service.py`, `business_service.py`, `guidance_service.py`, `lakehouse_service.py`, `metadata_service.py`, `ml_service.py`, `pipeline_service.py`, `quality_service.py`, `recommendation_service.py`, `visualization_service.py`, `workspace_management_service.py` |
 | Workflow services | `automation_workflow_service.py`, `business_workflow_service.py`, `collaboration_workflow_service.py`, `dataset_workflow_service.py`, `governance_workflow_service.py`, `guidance_workflow_service.py`, `ingestion_workflow_service.py`, `ml_workflow_service.py`, `pipeline_workflow_service.py`, `recommendation_workflow_service.py`, `visualization_workflow_service.py`, `workspace_workflow_service.py` |
 | Cross-cutting / infrastructure | `audit_service.py`, `backend/app/core/*` middleware, config, auth, database, retry, error handling, and observability utilities |
 
@@ -185,6 +186,7 @@ The classification is useful, but several workflow services are still thin. The 
 ## Architecture Strengths
 
 - API routes are mostly thin and delegate to services.
+- Recent metadata, analysis, and dashboard services now include explanatory docstrings that describe why responsibilities sit at route, service, and repository layers.
 - Backend tests cover many current routes and critical MVP workflows.
 - Metadata events, schema records, lineage records, usage events, and AI context records exist and can be queried.
 - Request logging and structured errors are already in place.
@@ -197,7 +199,7 @@ The classification is useful, but several workflow services are still thin. The 
 - Metadata is now a first-class core, but it is still early and does not yet cover dataset ownership, dashboard health, or freshness.
 - Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
 - SQL analytics has query history and source-dataset lineage; multi-dataset lineage remains future work.
-- AI features are not yet systematically grounded in DAOS metadata.
+- AI has a reusable metadata-grounded context builder, but automation and summaries still need to consume it directly.
 - Dashboards now have dependency and KPI ownership metadata, but still need health, alert readiness, and AI summaries.
 - Frontend tests are absent, and frontend lint is not configured.
 - Several services are thin or duplicative.
@@ -209,6 +211,6 @@ The classification is useful, but several workflow services are still thin. The 
 3. Complete Information Governance metadata with ownership, stewardship, classification, freshness, and migration coverage.
 4. Strengthen Information Analysis with saved-query-to-dashboard dependencies, repeatable result persistence, and richer SQL lineage as connector support expands.
 5. Strengthen Information Operationalization with dashboard health, alert-readiness checks, and AI dashboard summaries.
-6. Build the Information Intelligence context builder before adding new AI UI: source-grounded response format, confidence, affected assets, and recommended next action.
+6. Connect automation and dashboard summaries to the reusable AI context builder, then standardize reasoning summaries and affected assets.
 7. Add metrics-ready observability for ingestion jobs, query execution, metadata events, AI requests, and dashboard loads.
 8. Add frontend component tests and a frontend lint script so frontend changes have a comparable quality gate to backend changes.

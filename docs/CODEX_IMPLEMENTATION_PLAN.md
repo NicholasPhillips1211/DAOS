@@ -36,6 +36,8 @@ Features that do not improve this lifecycle should not be prioritized. Existing 
 - Routed ingestion, SQL query execution, dashboard creation, and automation generation through the metadata core.
 - Added query execution history, saved queries, execution duration capture, and dataset-to-query lineage metadata.
 - Added dashboard dependency records, KPI ownership, dataset-impact lookup, and dashboard lineage metadata.
+- Added explanatory docstrings around metadata, analysis, and dashboard workflow boundaries so persistence, orchestration, and route responsibilities are easier to maintain.
+- Added a reusable AI context builder that assembles lifecycle-grounded workspace context from metadata, lineage, usage, query history, dashboards, governance, and automation state.
 - Added `docs/ARCHITECTURE_REVIEW.md`.
 - Added `docs/TECHNICAL_DEBT_REGISTER.md`.
 - Validated backend lint, backend tests, frontend build, and local startup endpoints.
@@ -101,7 +103,6 @@ Remaining:
 - Add dataset ownership and stewardship metadata.
 - Extend SQL lineage beyond source dataset dependencies into saved queries, dashboards, and downstream outputs.
 - Add alert readiness, AI dashboard summaries, and operational dashboard health metrics.
-- Build a reusable AI context builder from metadata, profiles, lineage, usage, dashboards, and governance state.
 - Add operational metrics around metadata emission and record freshness.
 
 Exit criteria:
@@ -130,9 +131,17 @@ Remaining:
 
 ### Information Intelligence Track
 
+Completed:
+
 - Add AI context model.
 - Build a context builder from metadata, lineage, profiles, query history, dashboards, governance, and workspace state.
-- Standardize AI outputs with confidence, sources, reasoning summary, affected assets, and next action.
+- Return grounded context with confidence, sources, and recommended next actions.
+
+Remaining:
+
+- Standardize generated AI outputs with reasoning summary and affected assets.
+- Connect automation generation to the reusable AI context builder.
+- Add AI-generated dashboard summaries grounded in metadata.
 
 ### Information Operationalization Track
 

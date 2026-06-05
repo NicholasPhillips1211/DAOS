@@ -281,3 +281,81 @@ def test_query_execution_history_records_lineage_and_saved_queries(client) -> No
     assert query_lineage[0]["upstream_type"] == "dataset"
     assert query_lineage[0]["upstream_id"] == dataset_id
     assert query_lineage[0]["relation_type"] == "queried_by"
+
+
+def test_ai_context_builder_uses_lifecycle_metadata(client) -> None:
+    workspace_response = client.post(
+        "/api/v1/workspaces",
+        json={"name": "ai-context-ws", "description": "AI context builder tests"},
+    )
+    assert workspace_response.status_code == 201
+    workspace_id = workspace_response.json()["id"]
+
+    upload_response = client.post(
+        "/api/v1/ingestion/upload",
+        data={"workspace_id": workspace_id, "dataset_name": "sales"},
+        files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
+    )
+    assert upload_response.status_code == 201
+    dataset_id = upload_response.json()["dataset_id"]
+
+    query_response = client.post(
+        f"/api/v1/datasets/{dataset_id}/query",
+        json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
+    )
+    assert query_response.status_code == 200
+    history_response = client.get(
+        "/api/v1/analytics/query-executions",
+        params={"workspace_id": workspace_id, "dataset_id": dataset_id},
+    )
+    assert history_response.status_code == 200
+    query_execution_id = history_response.json()[0]["id"]
+
+    dashboard_response = client.post(
+        "/api/v1/visualizations/dashboards",
+        json={"workspace_id": workspace_id, "name": "Sales Ops", "description": "Operational dashboard"},
+    )
+    assert dashboard_response.status_code == 201
+    dashboard_id = dashboard_response.json()["id"]
+
+    dependency_response = client.post(
+        f"/api/v1/visualizations/dashboards/{dashboard_id}/dependencies",
+        json={"dataset_id": dataset_id, "query_execution_id": query_execution_id},
+    )
+    assert dependency_response.status_code == 201
+    owner_response = client.post(
+        f"/api/v1/visualizations/dashboards/{dashboard_id}/kpi-owners",
+        json={"kpi_name": "Revenue", "owner_email": "revenue@example.com"},
+    )
+    assert owner_response.status_code == 201
+
+    context_response = client.post(
+        "/api/v1/metadata/ai-context/build",
+        json={"workspace_id": workspace_id, "objective": "Explain revenue dashboard readiness"},
+    )
+    assert context_response.status_code == 201
+    body = context_response.json()
+    assert body["context_type"] == "workspace_context"
+    assert body["objective"] == "Explain revenue dashboard readiness"
+    assert body["confidence_score"] >= 0.8
+    assert "datasets" in body["sources"]
+    assert "metadata.lineage" in body["sources"]
+    assert "query_executions" in body["sources"]
+    assert "dashboards" in body["sources"]
+    assert body["context"]["lifecycle"]["information_collection"]["dataset_count"] == 1
+    assert body["context"]["lifecycle"]["information_analysis"]["query_execution_count"] == 1
+    assert body["context"]["lifecycle"]["information_operationalization"]["dashboard_count"] == 1
+    assert body["context"]["lifecycle"]["information_operationalization"]["dashboards"][0]["kpi_owners"][0]["owner_email"] == "revenue@example.com"
+    assert body["recommended_next_actions"]
+
+    stored_context_response = client.get(
+        "/api/v1/metadata/ai-context",
+        params={
+            "workspace_id": workspace_id,
+            "context_type": "workspace_context",
+            "resource_type": "workspace",
+            "resource_id": workspace_id,
+        },
+    )
+    assert stored_context_response.status_code == 200
+    assert stored_context_response.json()[0]["id"] == body["id"]

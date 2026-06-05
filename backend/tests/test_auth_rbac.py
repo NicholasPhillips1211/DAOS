@@ -254,6 +254,12 @@ def test_core_data_routes_require_workspace_membership(client) -> None:
                 headers=outsider_headers,
             )
             assert blocked_metadata.status_code == 403
+        blocked_context_build = client.post(
+            "/api/v1/metadata/ai-context/build",
+            json={"workspace_id": workspace_id, "objective": "Summarize protected workspace"},
+            headers=outsider_headers,
+        )
+        assert blocked_context_build.status_code == 403
     finally:
         settings.auth_enabled = original_enabled
         settings.api_keys_csv = original_keys

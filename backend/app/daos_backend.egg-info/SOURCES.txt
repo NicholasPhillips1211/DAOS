@@ -67,6 +67,7 @@ app/schemas/recommendation.py
 app/schemas/visualization.py
 app/schemas/workspace.py
 app/services/__init__.py
+app/services/ai_context_builder_service.py
 app/services/analytics_service.py
 app/services/analytics_workflow_service.py
 app/services/audit_service.py

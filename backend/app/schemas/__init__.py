@@ -13,6 +13,8 @@ from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
 from app.schemas.ml import FeatureImportanceRead, ModelTrainRequest, ModelTrainResponse
 from app.schemas.metadata import (
+    AIContextBuildRequest,
+    AIContextBuildResponse,
     MetadataAIContextRecordRead,
     MetadataEventRead,
     MetadataLineageRecordRead,
@@ -51,6 +53,8 @@ __all__ = [
     "ModelTrainRequest",
     "ModelTrainResponse",
     "MetadataAIContextRecordRead",
+    "AIContextBuildRequest",
+    "AIContextBuildResponse",
     "MetadataEventRead",
     "MetadataLineageRecordRead",
     "MetadataSchemaRecordRead",

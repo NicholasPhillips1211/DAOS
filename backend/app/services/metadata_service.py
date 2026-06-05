@@ -19,9 +19,17 @@ logger = logging.getLogger("daos.metadata")
 
 
 class MetadataService:
-    """Emit and query metadata events that power lineage and AI grounding."""
+    """Coordinate lifecycle metadata writes across events, lineage, usage, and AI context.
+
+    Routes and domain workflows call this service instead of touching metadata
+    tables directly. That keeps metadata emission consistent as DAOS moves
+    information through Collection, Governance, Analysis, Intelligence, and
+    Operationalization.
+    """
 
     def __init__(self, repository: MetadataRepository | None = None) -> None:
+        """Accept a repository override so tests and future stores can swap persistence cleanly."""
+
         self.repository = repository or MetadataRepository()
 
     def emit_event(
@@ -328,6 +336,8 @@ class MetadataService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataSchemaRecord]:
+        """Delegate schema reads through the service boundary used by API routes."""
+
         return self.repository.list_schema_records(
             db,
             workspace_id=workspace_id,
@@ -345,6 +355,8 @@ class MetadataService:
         asset_type: str | None = None,
         asset_id: int | None = None,
     ) -> int:
+        """Count schema records here so routes do not know repository details."""
+
         return self.repository.count_schema_records(db, workspace_id=workspace_id, asset_type=asset_type, asset_id=asset_id)
 
     def list_lineage_records(
@@ -357,6 +369,8 @@ class MetadataService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataLineageRecord]:
+        """Delegate lineage reads so callers use one metadata facade."""
+
         return self.repository.list_lineage_records(
             db,
             workspace_id=workspace_id,
@@ -374,6 +388,8 @@ class MetadataService:
         asset_type: str | None = None,
         asset_id: int | None = None,
     ) -> int:
+        """Count lineage records using the same filters exposed by the API."""
+
         return self.repository.count_lineage_records(db, workspace_id=workspace_id, asset_type=asset_type, asset_id=asset_id)
 
     def list_usage_events(
@@ -387,6 +403,8 @@ class MetadataService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataUsageEvent]:
+        """Delegate usage reads so operational and AI workflows share one access path."""
+
         return self.repository.list_usage_events(
             db,
             workspace_id=workspace_id,
@@ -406,6 +424,8 @@ class MetadataService:
         asset_id: int | None = None,
         action: str | None = None,
     ) -> int:
+        """Count usage events using the same filters exposed by the API."""
+
         return self.repository.count_usage_events(
             db,
             workspace_id=workspace_id,
@@ -425,6 +445,8 @@ class MetadataService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataAIContextRecord]:
+        """Delegate AI context reads for reusable intelligence grounding."""
+
         return self.repository.list_ai_context_records(
             db,
             workspace_id=workspace_id,
@@ -444,6 +466,8 @@ class MetadataService:
         resource_type: str | None = None,
         resource_id: int | None = None,
     ) -> int:
+        """Count AI context records using the same filters exposed by the API."""
+
         return self.repository.count_ai_context_records(
             db,
             workspace_id=workspace_id,
@@ -478,6 +502,8 @@ class MetadataService:
 
     @staticmethod
     def _schema_from_profile(profile: dict[str, Any]) -> list[dict[str, Any]]:
+        """Derive a minimal schema when profile metadata predates schema snapshots."""
+
         return [
             {"name": column.get("name", ""), "inferred_type": column.get("inferred_type", "unknown")}
             for column in profile.get("columns", [])

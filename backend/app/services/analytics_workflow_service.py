@@ -10,9 +10,16 @@ from app.services.metadata_service import MetadataService
 
 
 class AnalyticsWorkflowService:
-    """Bundle analytics persistence and file-statistic reads behind a single API."""
+    """Own multi-step analysis workflows that routes should not assemble inline.
+
+    Query execution, saved queries, and statistics touch datasets, analysis
+    records, and metadata. Keeping that orchestration here preserves thin
+    routes and keeps Information Analysis coupled to Governance metadata.
+    """
 
     def __init__(self, analytics_service: AnalyticsService, metadata_service: MetadataService | None = None) -> None:
+        """Inject domain services so workflow tests can replace collaborators cleanly."""
+
         self.analytics_service = analytics_service
         self.metadata_service = metadata_service or MetadataService()
 
@@ -106,6 +113,8 @@ class AnalyticsWorkflowService:
         return query.order_by(QueryExecution.created_at.desc()).limit(limit).offset(offset).all()
 
     def count_query_executions(self, db: Session, *, workspace_id: int, dataset_id: int | None = None) -> int:
+        """Count query history with the same filters used by list endpoints."""
+
         query = db.query(QueryExecution).filter(QueryExecution.workspace_id == workspace_id)
         if dataset_id is not None:
             query = query.filter(QueryExecution.dataset_id == dataset_id)
@@ -163,6 +172,8 @@ class AnalyticsWorkflowService:
         return query.order_by(SavedQuery.created_at.desc()).limit(limit).offset(offset).all()
 
     def count_saved_queries(self, db: Session, *, workspace_id: int, dataset_id: int | None = None) -> int:
+        """Count saved SQL statements with the same filters used by list endpoints."""
+
         query = db.query(SavedQuery).filter(SavedQuery.workspace_id == workspace_id)
         if dataset_id is not None:
             query = query.filter(SavedQuery.dataset_id == dataset_id)

@@ -1,3 +1,10 @@
+"""Repository primitives for lifecycle metadata persistence.
+
+This module intentionally contains no workflow decisions and does not commit
+transactions. Services compose these primitives into business operations so
+routes stay thin and multi-record metadata writes remain easy to reason about.
+"""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +21,12 @@ from app.models.metadata import (
 
 
 class MetadataRepository:
-    """Persistence boundary for lifecycle metadata records."""
+    """Persistence boundary for lifecycle metadata records.
+
+    The repository owns table-specific query/write mechanics while
+    `MetadataService` decides which records belong to a workflow. Keeping those
+    responsibilities separate makes the metadata backbone easier to extend.
+    """
 
     def add_schema_record(
         self,
@@ -27,6 +39,8 @@ class MetadataRepository:
         profile_fingerprint: str | None = None,
         source: str | None = None,
     ) -> MetadataSchemaRecord:
+        """Stage a schema snapshot without committing the caller's transaction."""
+
         record = MetadataSchemaRecord(
             workspace_id=workspace_id,
             asset_type=asset_type,
@@ -50,6 +64,8 @@ class MetadataRepository:
         relation_type: str,
         details: dict[str, Any] | None = None,
     ) -> MetadataLineageRecord:
+        """Stage a dependency edge without deciding why the edge exists."""
+
         record = MetadataLineageRecord(
             workspace_id=workspace_id,
             upstream_type=upstream_type,
@@ -73,6 +89,8 @@ class MetadataRepository:
         actor: str | None = None,
         details: dict[str, Any] | None = None,
     ) -> MetadataUsageEvent:
+        """Stage a usage event for a governed asset."""
+
         record = MetadataUsageEvent(
             workspace_id=workspace_id,
             asset_type=asset_type,
@@ -95,6 +113,8 @@ class MetadataRepository:
         resource_id: int | None = None,
         actor: str | None = None,
     ) -> MetadataAIContextRecord:
+        """Stage an AI grounding snapshot as JSON for provider-neutral reuse."""
+
         record = MetadataAIContextRecord(
             workspace_id=workspace_id,
             context_type=context_type,
@@ -116,6 +136,8 @@ class MetadataRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataSchemaRecord]:
+        """Return schema snapshots newest-first for registry and AI context reads."""
+
         query = db.query(MetadataSchemaRecord).filter(MetadataSchemaRecord.workspace_id == workspace_id)
         if asset_type:
             query = query.filter(MetadataSchemaRecord.asset_type == asset_type)
@@ -131,6 +153,8 @@ class MetadataRepository:
         asset_type: str | None = None,
         asset_id: int | None = None,
     ) -> int:
+        """Count schema snapshots with the same filters used by list reads."""
+
         query = db.query(MetadataSchemaRecord).filter(MetadataSchemaRecord.workspace_id == workspace_id)
         if asset_type:
             query = query.filter(MetadataSchemaRecord.asset_type == asset_type)
@@ -148,6 +172,8 @@ class MetadataRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataLineageRecord]:
+        """Return dependency edges for a workspace or specific participating asset."""
+
         query = db.query(MetadataLineageRecord).filter(MetadataLineageRecord.workspace_id == workspace_id)
         if asset_type and asset_id is not None:
             query = query.filter(
@@ -170,6 +196,8 @@ class MetadataRepository:
         asset_type: str | None = None,
         asset_id: int | None = None,
     ) -> int:
+        """Count lineage edges with the same filters used by list reads."""
+
         query = db.query(MetadataLineageRecord).filter(MetadataLineageRecord.workspace_id == workspace_id)
         if asset_type and asset_id is not None:
             query = query.filter(
@@ -195,6 +223,8 @@ class MetadataRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataUsageEvent]:
+        """Return usage events newest-first for operational history and AI grounding."""
+
         query = db.query(MetadataUsageEvent).filter(MetadataUsageEvent.workspace_id == workspace_id)
         if asset_type:
             query = query.filter(MetadataUsageEvent.asset_type == asset_type)
@@ -213,6 +243,8 @@ class MetadataRepository:
         asset_id: int | None = None,
         action: str | None = None,
     ) -> int:
+        """Count usage events with the same filters used by list reads."""
+
         query = db.query(MetadataUsageEvent).filter(MetadataUsageEvent.workspace_id == workspace_id)
         if asset_type:
             query = query.filter(MetadataUsageEvent.asset_type == asset_type)
@@ -233,6 +265,8 @@ class MetadataRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MetadataAIContextRecord]:
+        """Return AI context records newest-first for reuse by intelligence workflows."""
+
         query = db.query(MetadataAIContextRecord).filter(MetadataAIContextRecord.workspace_id == workspace_id)
         if context_type:
             query = query.filter(MetadataAIContextRecord.context_type == context_type)
@@ -251,6 +285,8 @@ class MetadataRepository:
         resource_type: str | None = None,
         resource_id: int | None = None,
     ) -> int:
+        """Count AI context records with the same filters used by list reads."""
+
         query = db.query(MetadataAIContextRecord).filter(MetadataAIContextRecord.workspace_id == workspace_id)
         if context_type:
             query = query.filter(MetadataAIContextRecord.context_type == context_type)
@@ -262,4 +298,6 @@ class MetadataRepository:
 
     @staticmethod
     def _dump_json(payload: Any) -> str:
+        """Serialize JSON consistently so metadata records diff and cache cleanly."""
+
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))

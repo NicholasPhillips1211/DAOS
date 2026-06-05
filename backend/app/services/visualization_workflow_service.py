@@ -17,7 +17,12 @@ from app.services.visualization_service import VisualizationService
 
 
 class VisualizationWorkflowService:
-    """Coordinate chart recommendation flows that depend on dataset statistics."""
+    """Coordinate dashboard and visualization workflows across operational assets.
+
+    Dashboards now carry dependencies, KPI ownership, and impact analysis, so
+    the route layer delegates here instead of mixing validation, persistence,
+    and metadata emission in HTTP handlers.
+    """
 
     def __init__(
         self,
@@ -25,6 +30,8 @@ class VisualizationWorkflowService:
         analytics_service: AnalyticsService,
         metadata_service: MetadataService | None = None,
     ) -> None:
+        """Inject collaborators to keep chart logic, metadata, and workflow rules separable."""
+
         self.visualization_service = visualization_service
         self.analytics_service = analytics_service
         self.metadata_service = metadata_service or MetadataService()
@@ -272,6 +279,8 @@ class VisualizationWorkflowService:
 
     @staticmethod
     def _get_dashboard(db: Session, dashboard_id: int) -> Dashboard:
+        """Centralize dashboard lookup so every workflow returns the same 404 shape."""
+
         dashboard = db.get(Dashboard, dashboard_id)
         if dashboard is None:
             raise HTTPException(status_code=404, detail="Dashboard not found")
@@ -279,6 +288,8 @@ class VisualizationWorkflowService:
 
     @staticmethod
     def _get_dataset(db: Session, dataset_id: int) -> Dataset:
+        """Centralize dataset lookup for dependency and impact workflows."""
+
         dataset = db.get(Dataset, dataset_id)
         if dataset is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
