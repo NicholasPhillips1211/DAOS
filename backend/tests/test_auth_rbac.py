@@ -193,12 +193,48 @@ def test_core_data_routes_require_workspace_membership(client) -> None:
         )
         assert blocked_dashboard_list.status_code == 403
 
+        dashboard_response = client.post(
+            "/api/v1/visualizations/dashboards",
+            json={"workspace_id": workspace_id, "name": "Protected", "description": "Owner dashboard"},
+            headers=owner_headers,
+        )
+        assert dashboard_response.status_code == 201
+        dashboard_id = dashboard_response.json()["id"]
+
         blocked_dashboard_create = client.post(
             "/api/v1/visualizations/dashboards",
             json={"workspace_id": workspace_id, "name": "Blocked", "description": "Should not create"},
             headers=outsider_headers,
         )
         assert blocked_dashboard_create.status_code == 403
+        blocked_impact = client.get(
+            "/api/v1/visualizations/dashboards/impact",
+            params={"workspace_id": workspace_id, "dataset_id": dataset_id},
+            headers=outsider_headers,
+        )
+        assert blocked_impact.status_code == 403
+        blocked_dependency_list = client.get(
+            f"/api/v1/visualizations/dashboards/{dashboard_id}/dependencies",
+            headers=outsider_headers,
+        )
+        assert blocked_dependency_list.status_code == 403
+        blocked_dependency_create = client.post(
+            f"/api/v1/visualizations/dashboards/{dashboard_id}/dependencies",
+            json={"dataset_id": dataset_id},
+            headers=outsider_headers,
+        )
+        assert blocked_dependency_create.status_code == 403
+        blocked_kpi_owner_list = client.get(
+            f"/api/v1/visualizations/dashboards/{dashboard_id}/kpi-owners",
+            headers=outsider_headers,
+        )
+        assert blocked_kpi_owner_list.status_code == 403
+        blocked_kpi_owner_create = client.post(
+            f"/api/v1/visualizations/dashboards/{dashboard_id}/kpi-owners",
+            json={"kpi_name": "Revenue", "owner_email": "owner@example.com"},
+            headers=outsider_headers,
+        )
+        assert blocked_kpi_owner_create.status_code == 403
 
         blocked_metadata = client.get(
             "/api/v1/metadata/events",

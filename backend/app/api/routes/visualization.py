@@ -17,6 +17,11 @@ from app.schemas.visualization import (
     ChartRecommendationRead,
     ChartRecommendationRequest,
     DashboardCreate,
+    DashboardDependencyCreate,
+    DashboardDependencyRead,
+    DashboardImpactRead,
+    DashboardKpiOwnerCreate,
+    DashboardKpiOwnerRead,
     DashboardRead,
 )
 from app.services.analytics_service import AnalyticsService
@@ -91,6 +96,107 @@ def create_dashboard(
     )
 
     return dashboard
+
+
+@router.get("/dashboards/impact", response_model=DashboardImpactRead)
+def dataset_dashboard_impact(
+    workspace_id: int = Query(..., description="Workspace scope for impact analysis"),
+    dataset_id: int = Query(..., description="Dataset whose downstream dashboards should be listed"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> DashboardImpactRead:
+    """Return dashboards affected by a dataset change."""
+
+    require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
+    return visualization_workflow_service.dataset_impact(db, workspace_id=workspace_id, dataset_id=dataset_id)
+
+
+@router.get("/dashboards/{dashboard_id}/dependencies", response_model=list[DashboardDependencyRead])
+def list_dashboard_dependencies(
+    dashboard_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> list[DashboardDependencyRead]:
+    """List governed information dependencies for a dashboard."""
+
+    require_model_workspace_role(db, Dashboard, dashboard_id, principal, WORKSPACE_READ_ROLES, model_name="Dashboard")
+    dependencies = visualization_workflow_service.list_dashboard_dependencies(db, dashboard_id=dashboard_id)
+    return [
+        DashboardDependencyRead(
+            id=dependency.id,
+            workspace_id=dependency.workspace_id,
+            dashboard_id=dependency.dashboard_id,
+            dataset_id=dependency.dataset_id,
+            query_execution_id=dependency.query_execution_id,
+            dependency_type=dependency.dependency_type,
+            details=visualization_workflow_service.parse_details(dependency.details_json),
+            created_at=dependency.created_at,
+        )
+        for dependency in dependencies
+    ]
+
+
+@router.post("/dashboards/{dashboard_id}/dependencies", response_model=DashboardDependencyRead, status_code=201)
+def create_dashboard_dependency(
+    dashboard_id: int,
+    payload: DashboardDependencyCreate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> DashboardDependencyRead:
+    """Register a dataset or query execution as powering a dashboard."""
+
+    require_model_workspace_role(db, Dashboard, dashboard_id, principal, WORKSPACE_WRITE_ROLES, model_name="Dashboard")
+    dependency = visualization_workflow_service.create_dashboard_dependency(
+        db,
+        dashboard_id=dashboard_id,
+        dataset_id=payload.dataset_id,
+        query_execution_id=payload.query_execution_id,
+        dependency_type=payload.dependency_type,
+        details=payload.details,
+        actor=principal.user_email,
+    )
+    return DashboardDependencyRead(
+        id=dependency.id,
+        workspace_id=dependency.workspace_id,
+        dashboard_id=dependency.dashboard_id,
+        dataset_id=dependency.dataset_id,
+        query_execution_id=dependency.query_execution_id,
+        dependency_type=dependency.dependency_type,
+        details=visualization_workflow_service.parse_details(dependency.details_json),
+        created_at=dependency.created_at,
+    )
+
+
+@router.get("/dashboards/{dashboard_id}/kpi-owners", response_model=list[DashboardKpiOwnerRead])
+def list_dashboard_kpi_owners(
+    dashboard_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> list[DashboardKpiOwnerRead]:
+    """List KPI owners assigned to a dashboard."""
+
+    require_model_workspace_role(db, Dashboard, dashboard_id, principal, WORKSPACE_READ_ROLES, model_name="Dashboard")
+    return visualization_workflow_service.list_kpi_owners(db, dashboard_id=dashboard_id)
+
+
+@router.post("/dashboards/{dashboard_id}/kpi-owners", response_model=DashboardKpiOwnerRead, status_code=201)
+def create_dashboard_kpi_owner(
+    dashboard_id: int,
+    payload: DashboardKpiOwnerCreate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> DashboardKpiOwnerRead:
+    """Assign ownership for a dashboard KPI."""
+
+    require_model_workspace_role(db, Dashboard, dashboard_id, principal, WORKSPACE_WRITE_ROLES, model_name="Dashboard")
+    return visualization_workflow_service.create_kpi_owner(
+        db,
+        dashboard_id=dashboard_id,
+        kpi_name=payload.kpi_name,
+        owner_email=payload.owner_email,
+        description=payload.description,
+        actor=principal.user_email,
+    )
 
 
 @router.post("/recommend-chart", response_model=ChartRecommendationRead)

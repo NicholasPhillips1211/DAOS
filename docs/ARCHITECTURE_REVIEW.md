@@ -14,7 +14,7 @@ This review covers the architecture as implemented in the repository after the s
 | --- | --- | --- |
 | Backend install | `.\.venv\Scripts\python.exe -m pip install -e .\backend[dev]` | Passed after sandbox escalation; installed declared backend runtime and dev dependencies. |
 | Backend lint | `.\.venv\Scripts\python.exe -m ruff check backend\app backend\tests` | Passed. |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 32 tests. |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 33 tests. |
 | Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503.42 kB JS asset. |
 | Backend startup | `AUTH_ENABLED=false .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000` | Passed; `/api/v1/health` returned `{"status":"ok","service":"daos-backend"}`. |
 | Frontend startup | `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | Passed; `http://127.0.0.1:5173` returned HTTP 200. |
@@ -110,7 +110,7 @@ Implemented flow:
 Gaps:
 
 - Analytics statistics currently load CSV rows into memory.
-- SQL lineage currently records the source dataset for an execution, but not saved-query-to-dashboard or multi-dataset dependencies.
+- SQL lineage records source datasets and can feed dashboard dependency lineage; multi-dataset lineage is still future work.
 
 ### Information Intelligence And Automation
 
@@ -135,14 +135,17 @@ Implemented flow:
 - Dashboards can be created.
 - Dashboard creation from query output is supported in the frontend workflow.
 - Dashboard creation records metadata usage events.
+- Dashboards can register dataset and query execution dependencies.
+- KPI owners can be assigned to dashboards.
+- Dataset-impact lookup returns dashboards and KPI owners affected by a dataset change.
+- Dashboard dependencies emit dataset-to-dashboard and query-to-dashboard lineage metadata.
 - Collaboration comments and shares can be recorded.
 - Audit tests cover dashboard creation events.
 
 Gaps:
 
-- Dashboard dependency tracking is not yet modeled.
-- KPI ownership, alert-readiness, AI dashboard summaries, and dataset-change impact analysis are not implemented yet.
-- Dashboard metadata is integrated only at the usage-event level.
+- Alert-readiness and AI dashboard summaries are not implemented yet.
+- Dashboard metadata has dependency and ownership records, but does not yet include health/freshness scoring.
 
 ### Observability
 
@@ -191,11 +194,11 @@ The classification is useful, but several workflow services are still thin. The 
 
 ## Architecture Risks
 
-- Metadata is now a first-class core, but it is still early and does not yet cover ownership, dashboard dependencies, or freshness.
+- Metadata is now a first-class core, but it is still early and does not yet cover dataset ownership, dashboard health, or freshness.
 - Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
-- SQL analytics has query history and source-dataset lineage, but not richer saved-query or dashboard dependency lineage.
+- SQL analytics has query history and source-dataset lineage; multi-dataset lineage remains future work.
 - AI features are not yet systematically grounded in DAOS metadata.
-- Dashboards are records and UI workflows, not operational assets with dependencies, ownership, usage, and impact analysis.
+- Dashboards now have dependency and KPI ownership metadata, but still need health, alert readiness, and AI summaries.
 - Frontend tests are absent, and frontend lint is not configured.
 - Several services are thin or duplicative.
 
@@ -205,7 +208,7 @@ The classification is useful, but several workflow services are still thin. The 
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
 3. Complete Information Governance metadata with ownership, stewardship, classification, freshness, and migration coverage.
 4. Strengthen Information Analysis with saved-query-to-dashboard dependencies, repeatable result persistence, and richer SQL lineage as connector support expands.
-5. Strengthen Information Operationalization with dashboard dependency metadata, KPI ownership, and dataset-change impact checks.
+5. Strengthen Information Operationalization with dashboard health, alert-readiness checks, and AI dashboard summaries.
 6. Build the Information Intelligence context builder before adding new AI UI: source-grounded response format, confidence, affected assets, and recommended next action.
 7. Add metrics-ready observability for ingestion jobs, query execution, metadata events, AI requests, and dashboard loads.
 8. Add frontend component tests and a frontend lint script so frontend changes have a comparable quality gate to backend changes.

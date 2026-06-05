@@ -35,6 +35,7 @@ Features that do not improve this lifecycle should not be prioritized. Existing 
 - Added first-class metadata repository boundaries and lifecycle metadata records for schemas, lineage, usage, and AI context.
 - Routed ingestion, SQL query execution, dashboard creation, and automation generation through the metadata core.
 - Added query execution history, saved queries, execution duration capture, and dataset-to-query lineage metadata.
+- Added dashboard dependency records, KPI ownership, dataset-impact lookup, and dashboard lineage metadata.
 - Added `docs/ARCHITECTURE_REVIEW.md`.
 - Added `docs/TECHNICAL_DEBT_REGISTER.md`.
 - Validated backend lint, backend tests, frontend build, and local startup endpoints.
@@ -99,7 +100,7 @@ Remaining:
 
 - Add dataset ownership and stewardship metadata.
 - Extend SQL lineage beyond source dataset dependencies into saved queries, dashboards, and downstream outputs.
-- Add dashboard dependency records, KPI ownership, and dataset-change impact metadata.
+- Add alert readiness, AI dashboard summaries, and operational dashboard health metrics.
 - Build a reusable AI context builder from metadata, profiles, lineage, usage, dashboards, and governance state.
 - Add operational metrics around metadata emission and record freshness.
 
@@ -135,11 +136,19 @@ Remaining:
 
 ### Information Operationalization Track
 
+Completed:
+
 - Add dashboard dependency records.
-- Emit dashboard usage events.
+- Emit dashboard usage and dependency events.
 - Add KPI ownership.
 - Add dataset-change impact analysis.
+- Emit dataset-to-dashboard and query-to-dashboard lineage metadata.
+
+Remaining:
+
 - Add AI-generated dashboard summaries grounded in metadata.
+- Add alert-readiness checks for dashboards.
+- Add operational dashboard health metrics.
 
 ### Observability And Quality
 

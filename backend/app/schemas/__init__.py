@@ -20,7 +20,17 @@ from app.schemas.metadata import (
     MetadataUsageEventRead,
 )
 from app.schemas.pipeline import PipelineCreate, PipelineRead, PipelineRunRead, PipelineScheduleUpdate, PipelineVersionCreate
-from app.schemas.visualization import ChartRecommendationRead, ChartRecommendationRequest, DashboardCreate, DashboardRead
+from app.schemas.visualization import (
+    ChartRecommendationRead,
+    ChartRecommendationRequest,
+    DashboardCreate,
+    DashboardDependencyCreate,
+    DashboardDependencyRead,
+    DashboardImpactRead,
+    DashboardKpiOwnerCreate,
+    DashboardKpiOwnerRead,
+    DashboardRead,
+)
 from app.schemas.workspace import MembershipCreate, MembershipRead, WorkspaceCreate, WorkspaceRead
 
 __all__ = [
@@ -50,6 +60,11 @@ __all__ = [
     "ChartRecommendationRead",
     "ChartRecommendationRequest",
     "DashboardCreate",
+    "DashboardDependencyCreate",
+    "DashboardDependencyRead",
+    "DashboardImpactRead",
+    "DashboardKpiOwnerCreate",
+    "DashboardKpiOwnerRead",
     "DashboardRead",
     "PipelineCreate",
     "PipelineRead",

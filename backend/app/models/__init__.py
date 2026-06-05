@@ -13,7 +13,7 @@ from app.models.metadata import (
 )
 from app.models.ml import TrainedModel
 from app.models.pipeline import Pipeline, PipelineRun, PipelineStatus, PipelineVersion
-from app.models.visualization import Dashboard
+from app.models.visualization import Dashboard, DashboardDependency, DashboardKpiOwner
 from app.models.collaboration import Comment, Share
 from app.models.governance import AuditEvent, DataMask
 from app.models.business import BusinessTranslation
@@ -39,6 +39,8 @@ __all__ = [
     "PipelineVersion",
     "TrainedModel",
     "Dashboard",
+    "DashboardDependency",
+    "DashboardKpiOwner",
     "Workspace",
     "WorkspaceMembership",
     "WorkspaceRole",
