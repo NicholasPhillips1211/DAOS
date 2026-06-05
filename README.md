@@ -1,18 +1,18 @@
 # DAOS
 
-DAOS is a modular Intelligent DataOps platform for analysts and data teams who need one workspace to ingest data, validate quality, explore SQL, produce dashboards, train models, translate technical findings into business language, and coordinate work across the lifecycle.
+DAOS is an AI-Powered Management Information Operating System for teams that need one workspace to collect operational information, govern it, analyze it, turn it into intelligence, and operationalize decisions.
 
 The repository is structured as a production-oriented scaffold. It already includes a FastAPI backend, a React + TypeScript frontend, Docker and Kubernetes deployment assets, a test suite, and a feature-oriented API layout that can be extended as the product matures.
 
 ## What The Platform Does
 
-DAOS is designed around a repeatable flow:
+DAOS is designed around the management information lifecycle:
 
-1. Data enters the workspace through upload, sync, or connector-driven ingestion.
-2. The backend registers the dataset and prepares metadata on startup.
-3. Quality checks, transformations, and profiling make the data usable.
-4. SQL analytics, pipelines, ML, and dashboards consume curated datasets.
-5. Recommendations, business summaries, and guidance turn outputs into decisions.
+1. Information Collection: data enters the workspace through upload, sync, or connector-driven ingestion.
+2. Information Governance: datasets are registered, profiled, validated, permissioned, and made auditable.
+3. Information Analysis: SQL, statistics, transformations, and dashboards help users examine governed information.
+4. Information Intelligence: recommendations, summaries, AI context, and guidance translate analysis into meaning.
+5. Information Operationalization: dashboards, shares, comments, automations, and exports turn intelligence into managed action.
 
 The current codebase focuses on the control plane and workspace experience. Many features are intentionally scaffolded so they can be hardened or expanded without changing the overall architecture.
 
@@ -264,4 +264,4 @@ When adding new functionality, follow the existing structure:
 - Add tests in `backend/tests/`.
 - Update the frontend when the user workflow changes.
 
-This keeps the platform maintainable as it grows from scaffolded features into a fully integrated product.
+Every new capability should strengthen Information Collection, Information Governance, Information Analysis, Information Intelligence, or Information Operationalization. Features outside that lifecycle should not be prioritized. This keeps the platform maintainable as it grows from scaffolded features into a fully integrated product.

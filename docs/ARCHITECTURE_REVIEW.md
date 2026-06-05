@@ -2,9 +2,9 @@
 
 Review date: 2026-06-03
 
-DAOS is currently a FastAPI + React operational analytics scaffold with good route/service separation, a working local workflow for CSV ingestion, profiling, SQL querying, dashboard creation, collaboration, automation planning, metadata events, and governance audit events. The product direction in this repository is strongest when it stays centered on:
+DAOS is currently a FastAPI + React scaffold for an AI-Powered Management Information Operating System with good route/service separation, a working local workflow for CSV ingestion, profiling, SQL querying, dashboard creation, collaboration, automation planning, metadata events, and governance audit events. The product direction in this repository is strongest when it stays centered on the management information lifecycle:
 
-Ingestion -> Dataset Profiling -> Metadata Generation -> SQL Analysis -> AI Insight Generation -> Dashboard Operationalization.
+Information Collection -> Information Governance -> Information Analysis -> Information Intelligence -> Information Operationalization.
 
 This review covers the architecture as implemented in the repository after the stabilization, RBAC, frontend cleanup, and Track 2 ingestion consolidation passes.
 
@@ -78,7 +78,7 @@ Gaps:
 - Ingestion is still synchronous and request-bound; the job lifecycle is durable, but processing is not yet handed off to a worker.
 - Retry handling exists for file and DB writes, but retries are still in-process and not yet backed by durable worker retry state.
 
-### Dataset Registry And Metadata
+### Information Governance Metadata
 
 Implemented flow:
 
@@ -93,7 +93,7 @@ Gaps:
 - Schema registry, lineage registry, usage events, AI context records, and dashboard dependency records are not yet implemented as explicit metadata assets.
 - Metadata emission is present for ingestion profile creation, but it is not consistent across SQL queries, dashboards, AI interactions, alerts, and workflow execution.
 
-### SQL Analytics
+### Information Analysis
 
 Implemented flow:
 
@@ -107,7 +107,7 @@ Gaps:
 - Analytics statistics currently load CSV rows into memory.
 - SQL execution emits audit events, but metadata lineage/usage generation is still shallow.
 
-### AI And Automation
+### Information Intelligence And Automation
 
 Implemented flow:
 
@@ -117,11 +117,11 @@ Implemented flow:
 
 Gaps:
 
-- AI is not yet grounded through a dedicated AI Context Layer.
+- AI is not yet grounded through a dedicated Information Intelligence layer.
 - Outputs do not consistently include source assets, affected assets, confidence, reasoning summary, and next action in a platform-wide format.
 - Automation is useful, but it risks being generic unless it is bound to metadata, lineage, dataset profiles, query history, dashboard dependencies, and governance state.
 
-### Dashboard Operationalization
+### Information Operationalization
 
 Implemented flow:
 
@@ -195,9 +195,9 @@ The classification is useful, but several workflow services are still thin. The 
 
 1. Move canonical ingestion work out of the request path through a worker/job runner and durable retry state.
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
-3. Implement first-class metadata architecture: metadata repository, event emitter, schema registry, lineage records, usage events, and audit event integration.
-4. Add query history, saved queries, execution metrics, dataset dependency tracking, and metadata emission for SQL workflows.
-5. Add dashboard dependency metadata, dashboard usage events, KPI ownership, and dataset-change impact checks.
-6. Build the AI Context Layer before adding new AI UI: context builder, source-grounded response format, confidence, affected assets, and recommended next action.
+3. Implement first-class Information Governance architecture: metadata repository, event emitter, schema registry, lineage records, usage events, and audit event integration.
+4. Strengthen Information Analysis with query history, saved queries, execution metrics, dataset dependency tracking, and metadata emission for SQL workflows.
+5. Strengthen Information Operationalization with dashboard dependency metadata, dashboard usage events, KPI ownership, and dataset-change impact checks.
+6. Build the Information Intelligence layer before adding new AI UI: context builder, source-grounded response format, confidence, affected assets, and recommended next action.
 7. Add metrics-ready observability for ingestion jobs, query execution, metadata events, AI requests, and dashboard loads.
 8. Add frontend component tests and a frontend lint script so frontend changes have a comparable quality gate to backend changes.

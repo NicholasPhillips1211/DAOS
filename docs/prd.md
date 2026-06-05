@@ -2,19 +2,31 @@
 
 ## Purpose
 
-This document defines the future direction of DAOS as a production-grade Intelligent DataOps platform. It focuses on product improvements, optimization opportunities, and strategic changes that will make the application easier to adopt, faster to use, easier to maintain, and more compelling for industry teams.
+This document defines the future direction of DAOS as an AI-Powered Management Information Operating System. It focuses on product improvements, optimization opportunities, and strategic changes that will make the application easier to adopt, faster to use, easier to maintain, and more compelling for industry teams.
 
 The current codebase already provides a strong scaffold: a FastAPI backend, a React frontend, Docker and Kubernetes assets, and a feature-oriented domain structure. The next phase is to transform that scaffold into a polished platform that can earn trust in real organizations.
 
 ## Product Vision
 
-DAOS should become a workspace where data teams can move from raw data to governed decisions in one place. A successful DAOS experience should feel:
+DAOS should become a workspace where teams move from collected information to governed, analyzed, intelligent, operational decisions in one place. A successful DAOS experience should feel:
 
 - Fast for common analysis and workflow tasks.
 - Clear for both technical and business users.
 - Reliable enough for day-to-day operations.
 - Flexible enough to support multiple deployment patterns.
 - Opinionated enough to guide users toward outcomes without overwhelming them.
+
+## Management Information Lifecycle
+
+All implementation priorities must strengthen the management information lifecycle:
+
+1. Information Collection: acquire information from files, APIs, databases, events, and user input with clear validation feedback.
+2. Information Governance: register, profile, permission, audit, classify, and steward information so teams can trust it.
+3. Information Analysis: help users query, compare, transform, model, visualize, and understand governed information.
+4. Information Intelligence: turn analysis into recommendations, summaries, context, explanations, and decision-ready signals.
+5. Information Operationalization: move intelligence into dashboards, workflows, approvals, automations, exports, and monitored actions.
+
+Features that do not improve this lifecycle should not be prioritized.
 
 ## Target Audience
 
@@ -35,7 +47,7 @@ Secondary users:
 
 Current data workflows are fragmented across separate tools for ingestion, modeling, analytics, collaboration, and reporting. This creates friction in setup, inconsistent governance, duplicated effort, and delayed decision-making.
 
-DAOS addresses that fragmentation, but to become widely adopted it must improve in four areas:
+DAOS addresses that fragmentation by managing the full information lifecycle, but to become widely adopted it must improve in four areas:
 
 1. Ease of onboarding and initial setup.
 2. Clarity of workflows and user navigation.
@@ -44,15 +56,15 @@ DAOS addresses that fragmentation, but to become widely adopted it must improve 
 
 ## Product Goals
 
-1. Reduce the time it takes a new user to reach their first useful result.
+1. Reduce the time it takes a new user to move from collected information to a useful governed result.
 2. Make the most common workflows obvious and consistent.
 3. Improve runtime efficiency and developer ergonomics.
 4. Strengthen product trust through governance, logging, and test coverage.
-5. Create a product experience that feels competitive with established industry tools.
+5. Create a product experience that feels competitive with established management information and analytics tools.
 
 ## Non-Goals
 
-This PRD does not attempt to define every implementation detail. It also does not prescribe a full enterprise data platform replacement on day one. The near-term goal is to make the current product sharper, faster, and easier to extend.
+This PRD does not attempt to define every implementation detail. It also does not prescribe a full enterprise management information suite on day one. The near-term goal is to make the current product sharper, faster, and easier to extend.
 
 ## Current State Summary
 
@@ -404,4 +416,4 @@ A significant product improvement should include:
 
 ## Summary
 
-DAOS already has the right structural foundation to become a compelling data platform. The next step is not to add more surface area indiscriminately, but to streamline the product around a small number of high-value workflows, improve trust and reliability, and make the experience feel professional enough for industry adoption.
+DAOS already has the right structural foundation to become a compelling Management Information Operating System. The next step is not to add more surface area indiscriminately, but to streamline the product around the management information lifecycle, improve trust and reliability, and make the experience feel professional enough for industry adoption.

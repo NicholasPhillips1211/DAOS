@@ -2,14 +2,22 @@
 
 Review date: 2026-06-03
 
-This plan keeps future Codex work aligned to the DAOS product identity: an AI-Powered Operational Analytics Workspace. Work should strengthen one of these pillars only:
+This plan keeps future Codex work aligned to the DAOS product identity: an AI-Powered Management Information Operating System. Work should strengthen the management information lifecycle only:
 
-1. Ingestion Platform
-2. Dataset Registry
-3. Metadata Engine
-4. SQL Workspace
-5. AI Context Layer
-6. Dashboard Operationalization
+1. Information Collection
+2. Information Governance
+3. Information Analysis
+4. Information Intelligence
+5. Information Operationalization
+
+Features that do not improve this lifecycle should not be prioritized. Existing implementation tracks remain useful, but they are delivery tracks under the lifecycle rather than the product identity:
+
+- Frontend workflow refactor: Information Analysis and Information Operationalization.
+- Ingestion backend consolidation: Information Collection and Information Governance.
+- Metadata core: Information Governance and Information Intelligence.
+- SQL workspace: Information Analysis.
+- AI context layer: Information Intelligence.
+- Dashboard operationalization: Information Operationalization.
 
 ## Completed In This Stabilization Pass
 
@@ -32,7 +40,7 @@ This plan keeps future Codex work aligned to the DAOS product identity: an AI-Po
 
 ### Track 1: Finish Frontend Workflow Refactor
 
-Goal: make the analyst workflow modular without changing product scope.
+Goal: make the analyst workflow modular without changing the management information scope.
 
 Tasks:
 
@@ -49,7 +57,7 @@ Exit criteria:
 
 ### Track 2: Consolidate Ingestion Backend
 
-Goal: make ingestion an observable workflow rather than request-bound upload handling.
+Goal: strengthen Information Collection and Information Governance by making ingestion an observable workflow rather than request-bound upload handling.
 
 Completed:
 
@@ -73,7 +81,7 @@ Exit criteria:
 
 ### Track 3: Build Metadata Core
 
-Goal: make metadata the platform nervous system.
+Goal: strengthen Information Governance and Information Intelligence by making metadata the platform nervous system.
 
 Tasks:
 
@@ -91,7 +99,7 @@ Exit criteria:
 
 ## Follow-On Tracks
 
-### SQL Workspace
+### Information Analysis Track
 
 - Add query execution records.
 - Add query history.
@@ -100,13 +108,13 @@ Exit criteria:
 - Emit usage and lineage metadata from query execution.
 - Add query performance metrics.
 
-### AI Context Layer
+### Information Intelligence Track
 
 - Add AI context model.
 - Build a context builder from metadata, lineage, profiles, query history, dashboards, governance, and workspace state.
 - Standardize AI outputs with confidence, sources, reasoning summary, affected assets, and next action.
 
-### Dashboard Operationalization
+### Information Operationalization Track
 
 - Add dashboard dependency records.
 - Emit dashboard usage events.
@@ -124,10 +132,11 @@ Exit criteria:
 
 ## Working Rules For Future Codex Passes
 
-- Do not add new platform domains before deepening ingestion, metadata, SQL, AI context, and dashboards.
+- Do not add new platform domains before deepening the management information lifecycle through ingestion, metadata, SQL, AI context, and dashboards.
 - Keep API routes thin.
 - Put business logic in services and persistence in repositories.
 - Do not run long jobs inside API requests.
 - Every major workflow operation should emit metadata and observability events.
+- Every new feature should explicitly map to Information Collection, Information Governance, Information Analysis, Information Intelligence, or Information Operationalization.
 - Every major change should update docs to describe implemented behavior only.
 - Every pass should end with targeted tests plus the relevant build/startup checks.
