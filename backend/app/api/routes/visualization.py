@@ -21,6 +21,7 @@ from app.schemas.visualization import (
 )
 from app.services.analytics_service import AnalyticsService
 from app.services.audit_service import AuditService
+from app.services.metadata_service import MetadataService
 from app.services.visualization_service import VisualizationService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
 from app.services.visualization_workflow_service import VisualizationWorkflowService
@@ -31,6 +32,7 @@ analytics_service = AnalyticsService()
 workspace_workflow_service = WorkspaceWorkflowService()
 visualization_workflow_service = VisualizationWorkflowService(visualization_service, analytics_service)
 audit_service = AuditService()
+metadata_service = MetadataService()
 
 
 @router.get("/dashboards", response_model=list[DashboardRead])
@@ -77,6 +79,15 @@ def create_dashboard(
         resource_type="dashboard",
         resource_id=dashboard.id,
         details=payload.description or payload.name,
+    )
+    metadata_service.record_usage_event(
+        db,
+        workspace_id=payload.workspace_id,
+        asset_type="dashboard",
+        asset_id=dashboard.id,
+        action="dashboard.created",
+        actor=principal.user_email,
+        details={"name": dashboard.name, "description": dashboard.description},
     )
 
     return dashboard

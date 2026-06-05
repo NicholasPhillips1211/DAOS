@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
@@ -14,11 +17,13 @@ from app.models.automation import AutomationPlan
 from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.services.automation_service import AutomationService, AutomationExecutor
 from app.services.automation_workflow_service import AutomationWorkflowService
+from app.services.metadata_service import MetadataService
 
 router = APIRouter()
 automation_service = AutomationService()
 automation_executor = AutomationExecutor()
 automation_workflow_service = AutomationWorkflowService(automation_service, automation_executor)
+metadata_service = MetadataService()
 
 
 
@@ -49,7 +54,23 @@ async def generate_plan(
     """Generate and persist an automation plan for a workspace objective."""
 
     require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_WRITE_ROLES)
-    return await automation_workflow_service.generate_plan(db, payload.workspace_id, payload.objective)
+    plan = await automation_workflow_service.generate_plan(db, payload.workspace_id, payload.objective)
+    metadata_service.record_ai_context(
+        db,
+        workspace_id=plan.workspace_id,
+        context_type="automation_plan",
+        resource_type="automation_plan",
+        resource_id=plan.id,
+        actor=principal.user_email,
+        context={
+            "objective": plan.objective,
+            "provider": plan.provider,
+            "model_name": plan.model_name,
+            "summary": plan.summary,
+            "plan": _parse_automation_json(plan.automation_json),
+        },
+    )
+    return plan
 
 
 @router.get("/{plan_id}", response_model=AutomationPlanRead)
@@ -69,3 +90,11 @@ def execute_plan(plan_id: int, db: Session = Depends(get_db), principal: Princip
     require_workspace_role(db, plan.workspace_id, principal, WORKSPACE_WRITE_ROLES)
 
     return automation_workflow_service.execute_plan(db, plan)
+
+
+def _parse_automation_json(value: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {"value": parsed}
+    except json.JSONDecodeError:
+        return {"raw": value}

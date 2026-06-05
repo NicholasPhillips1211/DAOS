@@ -4,7 +4,7 @@ from io import BytesIO
 def test_root_endpoint(client) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["name"] == "Intelligent DataOps Platform"
+    assert response.json()["name"] == "DAOS Management Information Operating System"
 
 
 def test_workspace_summary_reflects_empty_and_populated_states(client) -> None:

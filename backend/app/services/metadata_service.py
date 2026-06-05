@@ -7,12 +7,22 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.governance import AuditEvent
+from app.models.metadata import (
+    MetadataAIContextRecord,
+    MetadataLineageRecord,
+    MetadataSchemaRecord,
+    MetadataUsageEvent,
+)
+from app.repositories.metadata_repository import MetadataRepository
 
 logger = logging.getLogger("daos.metadata")
 
 
 class MetadataService:
     """Emit and query metadata events that power lineage and AI grounding."""
+
+    def __init__(self, repository: MetadataRepository | None = None) -> None:
+        self.repository = repository or MetadataRepository()
 
     def emit_event(
         self,
@@ -88,6 +98,290 @@ class MetadataService:
 
         return query.count()
 
+    def record_ingestion_profile(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        dataset_id: int,
+        dataset_name: str,
+        job_id: int,
+        report_id: int,
+        source_name: str,
+        storage_path: str,
+        profile: dict[str, Any],
+        actor: str | None = None,
+    ) -> AuditEvent:
+        """Persist ingestion metadata across schema, lineage, usage, AI context, and events."""
+
+        metadata = profile.get("metadata", {})
+        schema = metadata.get("schema") or self._schema_from_profile(profile)
+        profile_fingerprint = metadata.get("profile_fingerprint")
+        event_details = {
+            "job_id": job_id,
+            "dataset_name": dataset_name,
+            "report_id": report_id,
+            "row_count": profile.get("row_count", 0),
+            "rejected_rows": profile.get("rejected_rows", 0),
+            "quality_score": profile.get("quality_score", 0),
+            "status": "completed",
+        }
+
+        self.repository.add_schema_record(
+            db,
+            workspace_id=workspace_id,
+            asset_type="dataset",
+            asset_id=dataset_id,
+            schema=schema,
+            profile_fingerprint=profile_fingerprint,
+            source=source_name,
+        )
+        self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type="ingestion_job",
+            upstream_id=job_id,
+            downstream_type="dataset",
+            downstream_id=dataset_id,
+            relation_type="created_dataset",
+            details={
+                "dataset_name": dataset_name,
+                "source_name": source_name,
+                "storage_path": storage_path,
+                "profile_fingerprint": profile_fingerprint,
+            },
+        )
+        self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type="dataset",
+            asset_id=dataset_id,
+            action="information_collected",
+            actor=actor,
+            details={
+                "job_id": job_id,
+                "source_name": source_name,
+                "row_count": profile.get("row_count", 0),
+                "quality_score": profile.get("quality_score", 0),
+            },
+        )
+        self.repository.add_ai_context_record(
+            db,
+            workspace_id=workspace_id,
+            context_type="dataset_profile",
+            resource_type="dataset",
+            resource_id=dataset_id,
+            actor=actor,
+            context={
+                "dataset_name": dataset_name,
+                "schema": schema,
+                "row_count": profile.get("row_count", 0),
+                "rejected_rows": profile.get("rejected_rows", 0),
+                "quality_score": profile.get("quality_score", 0),
+                "issues": profile.get("issues", []),
+                "profile_fingerprint": profile_fingerprint,
+            },
+        )
+
+        event = AuditEvent(
+            workspace_id=workspace_id,
+            event_type="metadata.ingestion.profile_created",
+            actor=actor,
+            resource_type="dataset",
+            resource_id=dataset_id,
+            details=json.dumps(event_details, sort_keys=True),
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        return event
+
+    def record_usage_event(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str,
+        asset_id: int,
+        action: str,
+        actor: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> MetadataUsageEvent:
+        """Record how governed information was consumed by a workflow."""
+
+        record = self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            action=action,
+            actor=actor,
+            details=details,
+        )
+        db.commit()
+        db.refresh(record)
+        return record
+
+    def record_ai_context(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        context_type: str,
+        context: dict[str, Any],
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        actor: str | None = None,
+    ) -> MetadataAIContextRecord:
+        """Persist a grounding snapshot for AI-assisted workflows."""
+
+        record = self.repository.add_ai_context_record(
+            db,
+            workspace_id=workspace_id,
+            context_type=context_type,
+            context=context,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            actor=actor,
+        )
+        db.commit()
+        db.refresh(record)
+        return record
+
+    def list_schema_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataSchemaRecord]:
+        return self.repository.list_schema_records(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_schema_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+    ) -> int:
+        return self.repository.count_schema_records(db, workspace_id=workspace_id, asset_type=asset_type, asset_id=asset_id)
+
+    def list_lineage_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataLineageRecord]:
+        return self.repository.list_lineage_records(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_lineage_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+    ) -> int:
+        return self.repository.count_lineage_records(db, workspace_id=workspace_id, asset_type=asset_type, asset_id=asset_id)
+
+    def list_usage_events(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        action: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataUsageEvent]:
+        return self.repository.list_usage_events(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            action=action,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_usage_events(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        action: str | None = None,
+    ) -> int:
+        return self.repository.count_usage_events(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            action=action,
+        )
+
+    def list_ai_context_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        context_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataAIContextRecord]:
+        return self.repository.list_ai_context_records(
+            db,
+            workspace_id=workspace_id,
+            context_type=context_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_ai_context_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        context_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+    ) -> int:
+        return self.repository.count_ai_context_records(
+            db,
+            workspace_id=workspace_id,
+            context_type=context_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+
     def parse_details(self, event: AuditEvent) -> dict[str, Any]:
         """Parse JSON details safely for API response rendering."""
 
@@ -99,3 +393,22 @@ class MetadataService:
         except json.JSONDecodeError:
             logger.warning("metadata_event_unparseable id=%s", event.id)
             return {"raw": event.details}
+
+    def parse_record_json(self, value: str | None) -> dict[str, Any] | list[dict[str, Any]]:
+        """Parse JSON stored on first-class metadata records."""
+
+        if not value:
+            return {}
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, (dict, list)) else {"value": parsed}
+        except json.JSONDecodeError:
+            logger.warning("metadata_record_unparseable")
+            return {"raw": value}
+
+    @staticmethod
+    def _schema_from_profile(profile: dict[str, Any]) -> list[dict[str, Any]]:
+        return [
+            {"name": column.get("name", ""), "inferred_type": column.get("inferred_type", "unknown")}
+            for column in profile.get("columns", [])
+        ]

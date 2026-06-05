@@ -1,12 +1,12 @@
 # DAOS Architecture Review
 
-Review date: 2026-06-03
+Review date: 2026-06-05
 
 DAOS is currently a FastAPI + React scaffold for an AI-Powered Management Information Operating System with good route/service separation, a working local workflow for CSV ingestion, profiling, SQL querying, dashboard creation, collaboration, automation planning, metadata events, and governance audit events. The product direction in this repository is strongest when it stays centered on the management information lifecycle:
 
 Information Collection -> Information Governance -> Information Analysis -> Information Intelligence -> Information Operationalization.
 
-This review covers the architecture as implemented in the repository after the stabilization, RBAC, frontend cleanup, and Track 2 ingestion consolidation passes.
+This review covers the architecture as implemented in the repository after the stabilization, RBAC, frontend cleanup, Track 2 ingestion consolidation, and first metadata-core implementation passes.
 
 ## Validation Summary
 
@@ -14,7 +14,7 @@ This review covers the architecture as implemented in the repository after the s
 | --- | --- | --- |
 | Backend install | `.\.venv\Scripts\python.exe -m pip install -e .\backend[dev]` | Passed after sandbox escalation; installed declared backend runtime and dev dependencies. |
 | Backend lint | `.\.venv\Scripts\python.exe -m ruff check backend\app backend\tests` | Passed. |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 29 tests. |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 31 tests. |
 | Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503.42 kB JS asset. |
 | Backend startup | `AUTH_ENABLED=false .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000` | Passed; `/api/v1/health` returned `{"status":"ok","service":"daos-backend"}`. |
 | Frontend startup | `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | Passed; `http://127.0.0.1:5173` returned HTTP 200. |
@@ -86,12 +86,15 @@ Implemented flow:
 - Quality profile metadata is stored in the quality report JSON.
 - `MetadataService` emits metadata-prefixed events into the shared audit-event table.
 - `GET /api/v1/metadata/events` can query metadata events.
+- `MetadataRepository` provides first-class persistence boundaries for schema, lineage, usage, and AI context records.
+- `GET /api/v1/metadata/schemas`, `/lineage`, `/usage`, and `/ai-context` expose lifecycle metadata with workspace RBAC.
+- Successful ingestion records a dataset schema snapshot, ingestion-job-to-dataset lineage, collection usage, and dataset-profile AI context.
 
 Gaps:
 
-- Metadata is not yet a first-class registry layer with dedicated repository boundaries.
-- Schema registry, lineage registry, usage events, AI context records, and dashboard dependency records are not yet implemented as explicit metadata assets.
-- Metadata emission is present for ingestion profile creation, but it is not consistent across SQL queries, dashboards, AI interactions, alerts, and workflow execution.
+- Metadata ownership, stewardship, classification, and freshness records are not implemented yet.
+- SQL, dashboard, AI, alert, and workflow metadata are only partially modeled.
+- Dashboard dependency records are not yet implemented as explicit metadata assets.
 
 ### Information Analysis
 
@@ -100,12 +103,13 @@ Implemented flow:
 - Dataset query endpoints can run SQL against uploaded datasets.
 - Tests cover querying uploaded CSV data through lakehouse and dataset query routes.
 - Dataset statistics can be generated for uploaded CSV files.
+- Dataset and lakehouse query execution now records metadata usage events.
 
 Gaps:
 
 - Query history, saved queries, query execution metrics, and query-to-dataset dependency records are not first-class models yet.
 - Analytics statistics currently load CSV rows into memory.
-- SQL execution emits audit events, but metadata lineage/usage generation is still shallow.
+- SQL execution emits usage metadata, but query lineage and persisted query execution records are still shallow.
 
 ### Information Intelligence And Automation
 
@@ -113,11 +117,13 @@ Implemented flow:
 
 - Automation generation can call a local OpenAI-compatible endpoint or deterministic fallback.
 - Automation records can be generated and executed.
+- Automation generation records an AI context snapshot grounded in the generated plan payload.
+- Dataset ingestion records dataset-profile AI context for downstream AI grounding.
 - Tests cover automation behavior.
 
 Gaps:
 
-- AI is not yet grounded through a dedicated Information Intelligence layer.
+- AI context records exist, but there is not yet a reusable context builder.
 - Outputs do not consistently include source assets, affected assets, confidence, reasoning summary, and next action in a platform-wide format.
 - Automation is useful, but it risks being generic unless it is bound to metadata, lineage, dataset profiles, query history, dashboard dependencies, and governance state.
 
@@ -127,14 +133,15 @@ Implemented flow:
 
 - Dashboards can be created.
 - Dashboard creation from query output is supported in the frontend workflow.
+- Dashboard creation records metadata usage events.
 - Collaboration comments and shares can be recorded.
 - Audit tests cover dashboard creation events.
 
 Gaps:
 
 - Dashboard dependency tracking is not yet modeled.
-- Dashboard usage events, KPI ownership, alert-readiness, AI dashboard summaries, and dataset-change impact analysis are not implemented yet.
-- Dashboard metadata is not yet integrated into a broader metadata registry.
+- KPI ownership, alert-readiness, AI dashboard summaries, and dataset-change impact analysis are not implemented yet.
+- Dashboard metadata is integrated only at the usage-event level.
 
 ### Observability
 
@@ -175,7 +182,7 @@ The classification is useful, but several workflow services are still thin. The 
 
 - API routes are mostly thin and delegate to services.
 - Backend tests cover many current routes and critical MVP workflows.
-- Metadata events exist and can be queried.
+- Metadata events, schema records, lineage records, usage events, and AI context records exist and can be queried.
 - Request logging and structured errors are already in place.
 - The frontend now has a small root `App.tsx`, feature-oriented control-room modules, an ingestion workflow split into hook plus panel components, and an automation studio split into focused subpanels.
 - Home and guided-tour UI copy has been normalized to clean ASCII text after removing corrupted display characters.
@@ -183,7 +190,7 @@ The classification is useful, but several workflow services are still thin. The 
 
 ## Architecture Risks
 
-- Metadata is still event-like, not yet the platform nervous system.
+- Metadata is now a first-class core, but it is still early and does not yet cover ownership, query lineage, dashboard dependencies, or freshness.
 - Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
 - SQL analytics lacks query-history and lineage models.
 - AI features are not yet systematically grounded in DAOS metadata.
@@ -195,9 +202,9 @@ The classification is useful, but several workflow services are still thin. The 
 
 1. Move canonical ingestion work out of the request path through a worker/job runner and durable retry state.
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
-3. Implement first-class Information Governance architecture: metadata repository, event emitter, schema registry, lineage records, usage events, and audit event integration.
-4. Strengthen Information Analysis with query history, saved queries, execution metrics, dataset dependency tracking, and metadata emission for SQL workflows.
-5. Strengthen Information Operationalization with dashboard dependency metadata, dashboard usage events, KPI ownership, and dataset-change impact checks.
-6. Build the Information Intelligence layer before adding new AI UI: context builder, source-grounded response format, confidence, affected assets, and recommended next action.
+3. Complete Information Governance metadata with ownership, stewardship, classification, freshness, and migration coverage.
+4. Strengthen Information Analysis with query history, saved queries, execution metrics, dataset dependency tracking, and query lineage.
+5. Strengthen Information Operationalization with dashboard dependency metadata, KPI ownership, and dataset-change impact checks.
+6. Build the Information Intelligence context builder before adding new AI UI: source-grounded response format, confidence, affected assets, and recommended next action.
 7. Add metrics-ready observability for ingestion jobs, query execution, metadata events, AI requests, and dashboard loads.
 8. Add frontend component tests and a frontend lint script so frontend changes have a comparable quality gate to backend changes.

@@ -21,3 +21,56 @@ class MetadataEventRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MetadataSchemaRecordRead(BaseModel):
+    """Schema snapshot for a governed information asset."""
+
+    id: int
+    workspace_id: int
+    asset_type: str
+    asset_id: int
+    schema: list[dict[str, Any]]
+    profile_fingerprint: str | None
+    source: str | None
+    created_at: datetime
+
+
+class MetadataLineageRecordRead(BaseModel):
+    """Lineage edge between lifecycle assets."""
+
+    id: int
+    workspace_id: int
+    upstream_type: str
+    upstream_id: int
+    downstream_type: str
+    downstream_id: int
+    relation_type: str
+    details: dict[str, Any]
+    created_at: datetime
+
+
+class MetadataUsageEventRead(BaseModel):
+    """Usage event showing how information was consumed."""
+
+    id: int
+    workspace_id: int
+    asset_type: str
+    asset_id: int
+    action: str
+    actor: str | None
+    details: dict[str, Any]
+    created_at: datetime
+
+
+class MetadataAIContextRecordRead(BaseModel):
+    """AI grounding context captured from governed lifecycle metadata."""
+
+    id: int
+    workspace_id: int
+    context_type: str
+    resource_type: str | None
+    resource_id: int | None
+    actor: str | None
+    context: dict[str, Any]
+    created_at: datetime

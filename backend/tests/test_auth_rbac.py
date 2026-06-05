@@ -191,6 +191,18 @@ def test_core_data_routes_require_workspace_membership(client) -> None:
             headers=outsider_headers,
         )
         assert blocked_metadata.status_code == 403
+        for metadata_path in (
+            "/api/v1/metadata/schemas",
+            "/api/v1/metadata/lineage",
+            "/api/v1/metadata/usage",
+            "/api/v1/metadata/ai-context",
+        ):
+            blocked_metadata = client.get(
+                metadata_path,
+                params={"workspace_id": workspace_id},
+                headers=outsider_headers,
+            )
+            assert blocked_metadata.status_code == 403
     finally:
         settings.auth_enabled = original_enabled
         settings.api_keys_csv = original_keys

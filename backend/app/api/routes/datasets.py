@@ -16,6 +16,7 @@ from app.schemas.dataset import DatasetCreate, DatasetQueryRequest, DatasetQuery
 from app.services.audit_service import AuditService
 from app.services.dataset_workflow_service import DatasetWorkflowService
 from app.services.lakehouse_service import LakehouseService
+from app.services.metadata_service import MetadataService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
 
 router = APIRouter()
@@ -23,6 +24,7 @@ dataset_workflow_service = DatasetWorkflowService()
 lakehouse_service = LakehouseService()
 workspace_workflow_service = WorkspaceWorkflowService(lakehouse_service)
 audit_service = AuditService()
+metadata_service = MetadataService()
 
 
 @router.get("", response_model=list[DatasetRead])
@@ -82,6 +84,15 @@ def query_dataset(
         resource_id=dataset.id,
         details=f"Returned {len(rows)} rows",
         db=db,
+    )
+    metadata_service.record_usage_event(
+        db,
+        workspace_id=dataset.workspace_id,
+        asset_type="dataset",
+        asset_id=dataset.id,
+        action="dataset.query_executed",
+        actor=principal.user_email,
+        details={"route": "datasets", "row_count": len(rows), "columns": columns},
     )
 
     return DatasetQueryResponse(columns=columns, rows=rows, row_count=len(rows))

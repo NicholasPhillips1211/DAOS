@@ -1,6 +1,6 @@
 # Codex Implementation Plan
 
-Review date: 2026-06-03
+Review date: 2026-06-05
 
 This plan keeps future Codex work aligned to the DAOS product identity: an AI-Powered Management Information Operating System. Work should strengthen the management information lifecycle only:
 
@@ -32,6 +32,8 @@ Features that do not improve this lifecycle should not be prioritized. Existing 
 - Removed backend lint blockers in `main.py`, ingestion workflow code, and `tests/conftest.py`.
 - Hardened RBAC across workspace-scoped data routes.
 - Consolidated ingestion onto `IngestionWorkflowService`, removed the duplicate ingestion service, added queryable ingestion jobs, and streamed upload persistence.
+- Added first-class metadata repository boundaries and lifecycle metadata records for schemas, lineage, usage, and AI context.
+- Routed ingestion, SQL query execution, dashboard creation, and automation generation through the metadata core.
 - Added `docs/ARCHITECTURE_REVIEW.md`.
 - Added `docs/TECHNICAL_DEBT_REGISTER.md`.
 - Validated backend lint, backend tests, frontend build, and local startup endpoints.
@@ -83,7 +85,7 @@ Exit criteria:
 
 Goal: strengthen Information Governance and Information Intelligence by making metadata the platform nervous system.
 
-Tasks:
+Completed:
 
 - Add metadata repository boundaries.
 - Add schema registry records.
@@ -91,6 +93,14 @@ Tasks:
 - Add usage events.
 - Add AI context records.
 - Route ingestion, SQL, dashboard, and AI workflows through one metadata emitter.
+
+Remaining:
+
+- Add dataset ownership and stewardship metadata.
+- Add SQL query execution, saved query, and query-to-dataset lineage models.
+- Add dashboard dependency records, KPI ownership, and dataset-change impact metadata.
+- Build a reusable AI context builder from metadata, profiles, lineage, usage, dashboards, and governance state.
+- Add operational metrics around metadata emission and record freshness.
 
 Exit criteria:
 

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     explicit and avoids hard-coding runtime assumptions across the codebase.
     """
 
-    app_name: str = "Intelligent DataOps Platform"
+    app_name: str = "DAOS Management Information Operating System"
     api_prefix: str = "/api/v1"
     environment: str = "development"
     database_url: str = "sqlite:///./daos.db"

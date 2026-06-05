@@ -4,6 +4,13 @@ from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
 from app.schemas.ml import FeatureImportanceRead, ModelTrainRequest, ModelTrainResponse
+from app.schemas.metadata import (
+    MetadataAIContextRecordRead,
+    MetadataEventRead,
+    MetadataLineageRecordRead,
+    MetadataSchemaRecordRead,
+    MetadataUsageEventRead,
+)
 from app.schemas.pipeline import PipelineCreate, PipelineRead, PipelineRunRead, PipelineScheduleUpdate, PipelineVersionCreate
 from app.schemas.visualization import ChartRecommendationRead, ChartRecommendationRequest, DashboardCreate, DashboardRead
 from app.schemas.workspace import MembershipCreate, MembershipRead, WorkspaceCreate, WorkspaceRead
@@ -22,6 +29,11 @@ __all__ = [
     "FeatureImportanceRead",
     "ModelTrainRequest",
     "ModelTrainResponse",
+    "MetadataAIContextRecordRead",
+    "MetadataEventRead",
+    "MetadataLineageRecordRead",
+    "MetadataSchemaRecordRead",
+    "MetadataUsageEventRead",
     "AutomationGenerateRequest",
     "AutomationPlanRead",
     "ChartRecommendationRead",

@@ -30,6 +30,7 @@ class IngestionWorkflowResult:
     job: IngestionJob
     report: DataQualityReport
     storage_path: Path
+    profile: dict[str, Any]
 
 
 class IngestionWorkflowService:
@@ -224,7 +225,13 @@ class IngestionWorkflowService:
                 db.refresh(dataset)
                 db.refresh(report)
                 db.refresh(job)
-                return IngestionWorkflowResult(dataset=dataset, job=job, report=report, storage_path=storage_path)
+                return IngestionWorkflowResult(
+                    dataset=dataset,
+                    job=job,
+                    report=report,
+                    storage_path=storage_path,
+                    profile=profile,
+                )
             except SQLAlchemyError as exc:
                 db.rollback()
                 logger.warning(
@@ -313,22 +320,17 @@ class IngestionWorkflowService:
             details=f"Uploaded {job.source_name} with quality score {job.quality_score}",
             db=db,
         )
-        self.metadata_service.emit_event(
+        self.metadata_service.record_ingestion_profile(
             db,
             workspace_id=dataset.workspace_id,
-            event_type="metadata.ingestion.profile_created",
-            resource_type="dataset",
-            resource_id=dataset.id,
+            dataset_id=dataset.id,
+            dataset_name=dataset.name,
+            job_id=job.id,
+            report_id=report.id,
+            source_name=job.source_name,
+            storage_path=str(result.storage_path),
             actor=actor,
-            details={
-                "job_id": job.id,
-                "dataset_name": dataset.name,
-                "report_id": report.id,
-                "row_count": job.row_count,
-                "rejected_rows": job.rejected_rows,
-                "quality_score": job.quality_score,
-                "status": job.status,
-            },
+            profile=result.profile,
         )
 
     def emit_failure_events(
