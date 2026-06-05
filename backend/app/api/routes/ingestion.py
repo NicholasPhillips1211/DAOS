@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -12,14 +12,16 @@ from app.core.auth import (
     require_workspace_role,
     require_workspace_scope,
 )
+from app.core.config import settings
 from app.core.dependencies import get_db, get_pagination
-from app.models.ingestion import IngestionJob
+from app.models.ingestion import DataQualityReport, IngestionJob
+from app.models.metadata import Dataset
 from app.schemas.ingestion import IngestionJobRead, IngestionUploadRead
 from app.services.ingestion_workflow_service import IngestionWorkflowService
 
 router = APIRouter()
 ingestion_workflow_service = IngestionWorkflowService()
-RAW_STORAGE_ROOT = Path(__file__).resolve().parents[3] / "data" / "raw"
+RAW_STORAGE_ROOT = Path(settings.raw_storage_root)
 
 
 @router.get("/jobs", response_model=list[IngestionJobRead])
@@ -64,7 +66,7 @@ def get_ingestion_job(
     )
 
 
-@router.post("/upload", response_model=IngestionUploadRead, status_code=201)
+@router.post("/upload", response_model=IngestionUploadRead, status_code=status.HTTP_202_ACCEPTED)
 async def upload_dataset(
     workspace_id: int = Form(...),
     dataset_name: str = Form(...),
@@ -72,11 +74,11 @@ async def upload_dataset(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> IngestionUploadRead:
-    """Upload, profile, and register a dataset in one modular ingestion workflow."""
+    """Upload a dataset and queue profiling/registration for a worker."""
 
     require_workspace_role(db, workspace_id, principal, WORKSPACE_WRITE_ROLES)
 
-    result = ingestion_workflow_service.process_upload(
+    result = ingestion_workflow_service.queue_upload(
         db,
         raw_storage_root=RAW_STORAGE_ROOT,
         workspace_id=workspace_id,
@@ -85,23 +87,36 @@ async def upload_dataset(
         file_stream=file.file,
         actor=principal.user_email,
     )
-    dataset = result.dataset
-    job = result.job
-    report = result.report
+    return _upload_read_from_job(db, result.job)
 
+
+def _upload_read_from_job(db: Session, job: IngestionJob) -> IngestionUploadRead:
+    dataset = db.get(Dataset, job.dataset_id) if job.dataset_id is not None else None
+    report = (
+        db.query(DataQualityReport)
+        .filter(DataQualityReport.dataset_id == job.dataset_id)
+        .order_by(DataQualityReport.created_at.desc())
+        .first()
+        if job.dataset_id is not None
+        else None
+    )
     return IngestionUploadRead(
         job_id=job.id,
-        dataset_id=dataset.id,
-        workspace_id=workspace_id,
-        dataset_name=dataset.name,
-        state=dataset.state,
+        work_item_id=job.work_item_id,
+        dataset_id=job.dataset_id,
+        workspace_id=job.workspace_id,
+        dataset_name=dataset.name if dataset is not None else (job.dataset_name or job.source_name),
+        state=dataset.state if dataset is not None else None,
         status=job.status,
+        current_step=job.current_step,
+        progress_percent=job.progress_percent,
         quality_score=job.quality_score,
         row_count=job.row_count,
         rejected_rows=job.rejected_rows,
-        storage_path=str(result.storage_path),
-        report_id=report.id,
+        storage_path=dataset.storage_path if dataset is not None else job.storage_path,
+        report_id=report.id if report is not None else None,
         error_message=job.error_message,
-        created_at=dataset.created_at,
+        created_at=dataset.created_at if dataset is not None else job.created_at,
+        started_at=job.started_at,
         finished_at=job.finished_at,
     )

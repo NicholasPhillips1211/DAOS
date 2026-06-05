@@ -1,4 +1,4 @@
-import { DatasetRecord, IngestionUploadRead, QueryResult } from '../../types/domain';
+import { DatasetRecord, IngestionJobRead, IngestionUploadRead, QueryResult } from '../../types/domain';
 import { assertOk, buildApiHeaders } from '../../lib/http';
 
 /**
@@ -37,6 +37,21 @@ export async function uploadDatasetFile(
   });
   assertOk(response, 'Upload failed');
   return (await response.json()) as IngestionUploadRead;
+}
+
+/**
+ * Fetch the durable ingestion job so the UI can follow async profiling.
+ */
+export async function getIngestionJob(
+  apiBase: string,
+  userEmail: string,
+  jobId: number,
+): Promise<IngestionJobRead> {
+  const response = await fetch(`${apiBase}/ingestion/jobs/${jobId}`, {
+    headers: buildApiHeaders(userEmail, false),
+  });
+  assertOk(response, 'Ingestion job lookup failed');
+  return (await response.json()) as IngestionJobRead;
 }
 
 /**

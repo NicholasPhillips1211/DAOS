@@ -1,8 +1,0 @@
-api
-core
-models
-repositories
-schemas
-services
-tasks
-workers

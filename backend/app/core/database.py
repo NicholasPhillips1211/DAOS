@@ -28,8 +28,8 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, futu
 class Base(DeclarativeBase):
     """Shared SQLAlchemy declarative base for all ORM models.
 
-    Using one base lets the startup hook create the full schema in one pass and
-    keeps model metadata registration consistent across modules.
+    Using one base keeps Alembic metadata registration consistent across
+    modules and lets tests create isolated schemas from the same model graph.
     """
 
     pass

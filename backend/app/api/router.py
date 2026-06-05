@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import analytics, automation, business, collaboration, datasets, guidance, governance, health, ingestion, lakehouse, ml, observability, pipelines, quality, recommendations, visualization, workspaces, metadata
+from app.api.routes import analytics, automation, business, collaboration, datasets, guidance, governance, health, ingestion, lakehouse, ml, observability, pipelines, quality, recommendations, visualization, work_items, workspaces, metadata
 
 api_router = APIRouter()
 
@@ -11,6 +11,7 @@ ROUTES = [
     (datasets, "/datasets", ["datasets"]),
     (ingestion, "/ingestion", ["ingestion"]),
     (observability, "/observability", ["observability"]),
+    (work_items, "/work-items", ["work-items"]),
     (lakehouse, "/lakehouse", ["lakehouse"]),
     (quality, "/datasets", ["quality"]),
     (pipelines, "/pipelines", ["pipelines"]),

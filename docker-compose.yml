@@ -9,16 +9,57 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daos -d daos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
       context: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://daos:daos@postgres:5432/daos
+      RAW_STORAGE_ROOT: /app/data/raw
+      MODEL_ARTIFACT_ROOT: /app/data/models
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
+    volumes:
+      - daos_data:/app/data
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.workers.runner", "--loop"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://daos:daos@postgres:5432/daos
+      RAW_STORAGE_ROOT: /app/data/raw
+      MODEL_ARTIFACT_ROOT: /app/data/models
+      WORKER_ID: compose-worker
+      WORKER_STALE_AFTER_SECONDS: 300
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - daos_data:/app/data
+
+  migrate:
+    build:
+      context: ./backend
+    command: ["python", "scripts/run_migrations.py"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://daos:daos@postgres:5432/daos
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data: {}
+  daos_data: {}

@@ -1,6 +1,6 @@
 from time import perf_counter
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -15,12 +15,14 @@ from app.core.auth import (
 from app.core.dependencies import get_db, get_pagination
 from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetCreate, DatasetQueryRequest, DatasetQueryResponse, DatasetRead
+from app.schemas.work_item import WorkItemSubmitRead
 from app.services.analytics_service import AnalyticsService
 from app.services.analytics_workflow_service import AnalyticsWorkflowService
 from app.services.audit_service import AuditService
 from app.services.dataset_workflow_service import DatasetWorkflowService
 from app.services.lakehouse_service import LakehouseService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
+from app.services.work_queue_service import WorkQueueService
 
 router = APIRouter()
 dataset_workflow_service = DatasetWorkflowService()
@@ -28,6 +30,7 @@ lakehouse_service = LakehouseService()
 workspace_workflow_service = WorkspaceWorkflowService(lakehouse_service)
 audit_service = AuditService()
 analytics_workflow_service = AnalyticsWorkflowService(AnalyticsService())
+work_queue_service = WorkQueueService()
 
 
 @router.get("", response_model=list[DatasetRead])
@@ -102,3 +105,28 @@ def query_dataset(
     )
 
     return DatasetQueryResponse(columns=columns, rows=rows, row_count=len(rows))
+
+
+@router.post("/{dataset_id}/query-jobs", response_model=WorkItemSubmitRead, status_code=status.HTTP_202_ACCEPTED)
+def queue_dataset_query(
+    dataset_id: int,
+    payload: DatasetQueryRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> WorkItemSubmitRead:
+    """Queue SQL execution when a query may be too expensive for the request path."""
+
+    dataset = require_model_workspace_role(db, Dataset, dataset_id, principal, WORKSPACE_READ_ROLES, model_name="Dataset")
+    item = work_queue_service.enqueue(
+        db,
+        workspace_id=dataset.workspace_id,
+        job_type="lakehouse.query",
+        payload={"dataset_id": dataset.id, "sql": payload.sql, "actor": principal.user_email},
+    )
+    return WorkItemSubmitRead(
+        work_item_id=item.id,
+        workspace_id=item.workspace_id,
+        job_type=item.job_type,
+        status=item.status,
+        created_at=item.created_at,
+    )

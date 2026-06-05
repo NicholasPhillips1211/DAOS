@@ -32,7 +32,7 @@ The application is organized as a control plane with a small number of clear res
 
 - The frontend is the analyst-facing UI.
 - The backend exposes versioned APIs under `/api/v1`.
-- The backend creates the database schema on startup.
+- Database schema changes are applied through Alembic migrations, not backend startup.
 - The default development database is SQLite, while Docker Compose wires the backend to Postgres.
 - Cross-origin requests are allowed only from the local Vite development server by default.
 - Security headers can be enforced through backend configuration.
@@ -55,6 +55,7 @@ From the backend directory:
 
 ```bash
 cd backend
+python scripts/run_migrations.py
 python -m uvicorn app.main:app --reload
 ```
 
@@ -67,7 +68,14 @@ cd backend
 pytest tests -q
 ```
 
-The backend starts by creating database tables through SQLAlchemy metadata. If you are using the default local settings, it stores data in `backend/daos.db`. When started through Docker Compose, it uses Postgres instead.
+If you are using the default local settings, the backend stores data in `backend/daos.db`. When started through Docker Compose, it uses Postgres instead. Run migrations before starting the API when schema changes are introduced.
+
+Run the background worker in a second backend terminal when you want queued ingestion, query, ML, automation, or dashboard-refresh work to complete outside the request path:
+
+```bash
+cd backend
+python -m app.workers.runner --loop
+```
 
 ### Frontend
 
@@ -107,6 +115,8 @@ This starts:
 
 - Postgres on `5432`.
 - The backend on `8000`.
+- A migration job that applies Alembic schema changes.
+- A background worker that processes queued work items.
 
 ## Configuration
 
@@ -126,6 +136,9 @@ Important settings include:
 - `LLM_MODEL` for the model identifier.
 - `LLM_API_KEY` for model authorization.
 - `LLM_TIMEOUT_SECONDS` for LLM call timeouts.
+- `RAW_STORAGE_ROOT` for persisted raw upload files shared by API and worker.
+- `MODEL_ARTIFACT_ROOT` for generated ML artifacts shared by API and worker.
+- `WORKER_ID`, `WORKER_POLL_SECONDS`, and `WORKER_STALE_AFTER_SECONDS` for worker identity, polling cadence, and stale-lock recovery.
 
 Example local LLM settings:
 
@@ -154,7 +167,7 @@ The workspace API also exposes a summary endpoint at `/api/v1/workspaces/{worksp
 
 ### Ingestion And Lakehouse
 
-These routes are intended for moving raw data into the platform and making it queryable in analytical form. Use them when implementing file upload, sync, staging, validation, or SQL-facing dataset workflows.
+These routes are intended for moving raw data into the platform and making it queryable in analytical form. Uploads now return an accepted ingestion job, then a worker profiles the file, creates the dataset, writes the quality report, and emits metadata. Use `GET /api/v1/ingestion/jobs/{job_id}` and `/api/v1/work-items/{work_item_id}` to follow progress.
 
 ### Pipelines And Automation
 
@@ -162,7 +175,7 @@ Pipelines capture repeatable processing logic. Automation is used to generate ac
 
 ### ML, Visualizations, Analytics, And Recommendations
 
-These services support exploration, insight generation, model training, explainability, and presentation of results. Extend them when adding charts, prediction flows, comparison reports, or recommendation logic.
+These services support exploration, insight generation, model training, explainability, and presentation of results. Synchronous endpoints remain available for small local workflows, and async job endpoints now exist for heavier SQL, model training, automation, and dashboard refresh work.
 
 ### Collaboration, Governance, And Business Translation
 
@@ -216,6 +229,8 @@ If you change deployment wiring or environment variables, also validate the comp
 ```bash
 docker compose -f docker-compose.yml up --build
 ```
+
+If you change background workflow behavior, run the worker-backed tests and confirm the work item endpoints expose queued, running, succeeded, and failed states as expected.
 
 ## Deployment
 

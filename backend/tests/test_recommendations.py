@@ -15,7 +15,7 @@ def test_recommendation_generation_for_new_workspace(client) -> None:
     assert "Ingest your first dataset" in titles
 
 
-def test_recommendation_generation_for_maturing_workspace(client) -> None:
+def test_recommendation_generation_for_maturing_workspace(client, complete_upload) -> None:
     ws_resp = client.post("/api/v1/workspaces", json={"name": "rec-mature", "description": "recommendations"})
     assert ws_resp.status_code == 201
     workspace_id = ws_resp.json()["id"]
@@ -31,8 +31,8 @@ def test_recommendation_generation_for_maturing_workspace(client) -> None:
             )
         },
     )
-    assert upload_resp.status_code == 201
-    dataset_id = upload_resp.json()["dataset_id"]
+    upload_body = complete_upload(upload_resp)
+    dataset_id = upload_body["dataset_id"]
 
     insight_resp = client.post(
         "/api/v1/analytics/insights",

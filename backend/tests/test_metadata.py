@@ -1,7 +1,7 @@
 from io import BytesIO
 
 
-def test_ingestion_emits_queryable_metadata_event(client) -> None:
+def test_ingestion_emits_queryable_metadata_event(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "metadata-ws", "description": "metadata event tests"},
@@ -14,8 +14,7 @@ def test_ingestion_emits_queryable_metadata_event(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    upload_body = upload_response.json()
+    upload_body = complete_upload(upload_response)
 
     metadata_response = client.get(
         "/api/v1/metadata/events",
@@ -43,7 +42,7 @@ def test_ingestion_emits_queryable_metadata_event(client) -> None:
     assert event["details"]["status"] == "completed"
 
 
-def test_ingestion_registers_lifecycle_metadata_records(client) -> None:
+def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "metadata-core-ws", "description": "metadata core tests"},
@@ -56,8 +55,7 @@ def test_ingestion_registers_lifecycle_metadata_records(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    upload_body = upload_response.json()
+    upload_body = complete_upload(upload_response)
     dataset_id = upload_body["dataset_id"]
     job_id = upload_body["job_id"]
 
@@ -118,7 +116,7 @@ def test_ingestion_registers_lifecycle_metadata_records(client) -> None:
     assert ai_context["schema"][0]["name"] == "id"
 
 
-def test_query_dashboard_and_automation_emit_lifecycle_metadata(client) -> None:
+def test_query_dashboard_and_automation_emit_lifecycle_metadata(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "metadata-usage-ws", "description": "metadata usage tests"},
@@ -131,8 +129,8 @@ def test_query_dashboard_and_automation_emit_lifecycle_metadata(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     query_response = client.post(
         f"/api/v1/datasets/{dataset_id}/query",
@@ -195,7 +193,7 @@ def test_query_dashboard_and_automation_emit_lifecycle_metadata(client) -> None:
     assert context["plan"]["trace"]["grounding"]["signal_snapshot"]["dataset_count"] == 1
 
 
-def test_query_execution_history_records_lineage_and_saved_queries(client) -> None:
+def test_query_execution_history_records_lineage_and_saved_queries(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "query-history-ws", "description": "query lineage tests"},
@@ -208,8 +206,8 @@ def test_query_execution_history_records_lineage_and_saved_queries(client) -> No
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     save_response = client.post(
         "/api/v1/analytics/saved-queries",
@@ -283,7 +281,7 @@ def test_query_execution_history_records_lineage_and_saved_queries(client) -> No
     assert query_lineage[0]["relation_type"] == "queried_by"
 
 
-def test_ai_context_builder_uses_lifecycle_metadata(client) -> None:
+def test_ai_context_builder_uses_lifecycle_metadata(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "ai-context-ws", "description": "AI context builder tests"},
@@ -296,8 +294,8 @@ def test_ai_context_builder_uses_lifecycle_metadata(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     query_response = client.post(
         f"/api/v1/datasets/{dataset_id}/query",

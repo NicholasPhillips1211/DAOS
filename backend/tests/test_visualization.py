@@ -1,7 +1,7 @@
 from io import BytesIO
 
 
-def test_dashboard_creation_and_chart_recommendation(client) -> None:
+def test_dashboard_creation_and_chart_recommendation(client, complete_upload) -> None:
     workspace_response = client.post("/api/v1/workspaces", json={"name": "viz-team", "description": "visualization workspace"})
     assert workspace_response.status_code == 201
     workspace_id = workspace_response.json()["id"]
@@ -26,8 +26,8 @@ def test_dashboard_creation_and_chart_recommendation(client) -> None:
             )
         },
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     recommendation_response = client.post(
         "/api/v1/visualizations/recommend-chart",
@@ -39,7 +39,7 @@ def test_dashboard_creation_and_chart_recommendation(client) -> None:
     assert recommendation_body["best_practices"]
 
 
-def test_dashboard_dependencies_kpi_owners_and_dataset_impact(client) -> None:
+def test_dashboard_dependencies_kpi_owners_and_dataset_impact(client, complete_upload) -> None:
     workspace_response = client.post(
         "/api/v1/workspaces",
         json={"name": "operational-dashboard-ws", "description": "dashboard dependency tests"},
@@ -52,8 +52,8 @@ def test_dashboard_dependencies_kpi_owners_and_dataset_impact(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     query_response = client.post(
         f"/api/v1/datasets/{dataset_id}/query",

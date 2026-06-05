@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -24,12 +24,14 @@ from app.schemas.visualization import (
     DashboardKpiOwnerRead,
     DashboardRead,
 )
+from app.schemas.work_item import WorkItemSubmitRead
 from app.services.analytics_service import AnalyticsService
 from app.services.audit_service import AuditService
 from app.services.metadata_service import MetadataService
 from app.services.visualization_service import VisualizationService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
 from app.services.visualization_workflow_service import VisualizationWorkflowService
+from app.services.work_queue_service import WorkQueueService
 
 router = APIRouter()
 visualization_service = VisualizationService()
@@ -38,6 +40,7 @@ workspace_workflow_service = WorkspaceWorkflowService()
 visualization_workflow_service = VisualizationWorkflowService(visualization_service, analytics_service)
 audit_service = AuditService()
 metadata_service = MetadataService()
+work_queue_service = WorkQueueService()
 
 
 @router.get("/dashboards", response_model=list[DashboardRead])
@@ -96,6 +99,30 @@ def create_dashboard(
     )
 
     return dashboard
+
+
+@router.post("/dashboards/{dashboard_id}/refresh-jobs", response_model=WorkItemSubmitRead, status_code=status.HTTP_202_ACCEPTED)
+def queue_dashboard_refresh(
+    dashboard_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> WorkItemSubmitRead:
+    """Queue a dashboard refresh/metadata update for worker execution."""
+
+    dashboard = require_model_workspace_role(db, Dashboard, dashboard_id, principal, WORKSPACE_WRITE_ROLES, model_name="Dashboard")
+    item = work_queue_service.enqueue(
+        db,
+        workspace_id=dashboard.workspace_id,
+        job_type="dashboard.refresh",
+        payload={"dashboard_id": dashboard.id, "actor": principal.user_email},
+    )
+    return WorkItemSubmitRead(
+        work_item_id=item.id,
+        workspace_id=item.workspace_id,
+        job_type=item.job_type,
+        status=item.status,
+        created_at=item.created_at,
+    )
 
 
 @router.get("/dashboards/impact", response_model=DashboardImpactRead)

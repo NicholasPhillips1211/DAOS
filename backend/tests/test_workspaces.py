@@ -7,7 +7,7 @@ def test_root_endpoint(client) -> None:
     assert response.json()["name"] == "DAOS Management Information Operating System"
 
 
-def test_workspace_summary_reflects_empty_and_populated_states(client) -> None:
+def test_workspace_summary_reflects_empty_and_populated_states(client, complete_upload) -> None:
     workspace_response = client.post("/api/v1/workspaces", json={"name": "analysis", "description": "team workspace"})
     assert workspace_response.status_code == 201
     workspace_id = workspace_response.json()["id"]
@@ -27,7 +27,7 @@ def test_workspace_summary_reflects_empty_and_populated_states(client) -> None:
         data={"workspace_id": workspace_id, "dataset_name": "sales"},
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
-    assert upload_response.status_code == 201
+    complete_upload(upload_response)
 
     refreshed_summary_response = client.get(f"/api/v1/workspaces/{workspace_id}/summary")
     assert refreshed_summary_response.status_code == 200

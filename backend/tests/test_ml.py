@@ -1,7 +1,7 @@
 from io import BytesIO
 
 
-def test_model_training_produces_artifact_and_metrics(client) -> None:
+def test_model_training_produces_artifact_and_metrics(client, complete_upload) -> None:
     workspace_response = client.post("/api/v1/workspaces", json={"name": "ml-team", "description": "ml workspace"})
     assert workspace_response.status_code == 201
     workspace_id = workspace_response.json()["id"]
@@ -19,8 +19,8 @@ def test_model_training_produces_artifact_and_metrics(client) -> None:
             )
         },
     )
-    assert upload_response.status_code == 201
-    dataset_id = upload_response.json()["dataset_id"]
+    upload_body = complete_upload(upload_response)
+    dataset_id = upload_body["dataset_id"]
 
     train_response = client.post(
         "/api/v1/ml/train",

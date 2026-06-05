@@ -25,6 +25,13 @@ spec:
               value: postgresql+psycopg://daos:daos@postgres:5432/daos
             - name: CORS_ORIGINS
               value: '["http://localhost:5173"]'
+            - name: RAW_STORAGE_ROOT
+              value: /app/data/raw
+            - name: MODEL_ARTIFACT_ROOT
+              value: /app/data/models
+          volumeMounts:
+            - name: daos-data
+              mountPath: /app/data
           readinessProbe:
             httpGet:
               path: /api/v1/health
@@ -37,6 +44,10 @@ spec:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
+      volumes:
+        - name: daos-data
+          persistentVolumeClaim:
+            claimName: daos-data
 ---
 apiVersion: v1
 kind: Service
@@ -49,3 +60,56 @@ spec:
     - port: 80
       targetPort: 8000
   type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daos-worker
+  labels:
+    app: daos-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: daos-worker
+  template:
+    metadata:
+      labels:
+        app: daos-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/example/daos-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.workers.runner", "--loop"]
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://daos:daos@postgres:5432/daos
+            - name: RAW_STORAGE_ROOT
+              value: /app/data/raw
+            - name: MODEL_ARTIFACT_ROOT
+              value: /app/data/models
+            - name: WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: WORKER_STALE_AFTER_SECONDS
+              value: "300"
+          volumeMounts:
+            - name: daos-data
+              mountPath: /app/data
+      volumes:
+        - name: daos-data
+          persistentVolumeClaim:
+            claimName: daos-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: daos-data
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi

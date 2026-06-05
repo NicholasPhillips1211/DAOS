@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -15,15 +15,18 @@ from app.core.auth import (
 from app.core.dependencies import get_db, get_pagination
 from app.models.automation import AutomationPlan
 from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
+from app.schemas.work_item import WorkItemSubmitRead
 from app.services.automation_service import AutomationService, AutomationExecutor
 from app.services.automation_workflow_service import AutomationWorkflowService
 from app.services.metadata_service import MetadataService
+from app.services.work_queue_service import WorkQueueService
 
 router = APIRouter()
 automation_service = AutomationService()
 automation_executor = AutomationExecutor()
 automation_workflow_service = AutomationWorkflowService(automation_service, automation_executor)
 metadata_service = MetadataService()
+work_queue_service = WorkQueueService()
 
 
 
@@ -73,6 +76,30 @@ async def generate_plan(
     return plan
 
 
+@router.post("/generate-jobs", response_model=WorkItemSubmitRead, status_code=status.HTTP_202_ACCEPTED)
+def queue_generate_plan(
+    payload: AutomationGenerateRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> WorkItemSubmitRead:
+    """Queue automation-plan generation for a background worker."""
+
+    require_workspace_role(db, payload.workspace_id, principal, WORKSPACE_WRITE_ROLES)
+    item = work_queue_service.enqueue(
+        db,
+        workspace_id=payload.workspace_id,
+        job_type="automation.generate",
+        payload={"workspace_id": payload.workspace_id, "objective": payload.objective, "actor": principal.user_email},
+    )
+    return WorkItemSubmitRead(
+        work_item_id=item.id,
+        workspace_id=item.workspace_id,
+        job_type=item.job_type,
+        status=item.status,
+        created_at=item.created_at,
+    )
+
+
 @router.get("/{plan_id}", response_model=AutomationPlanRead)
 def get_plan(plan_id: int, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> AutomationPlan:
     """Fetch a stored automation plan by id."""
@@ -90,6 +117,27 @@ def execute_plan(plan_id: int, db: Session = Depends(get_db), principal: Princip
     require_workspace_role(db, plan.workspace_id, principal, WORKSPACE_WRITE_ROLES)
 
     return automation_workflow_service.execute_plan(db, plan)
+
+
+@router.post("/{plan_id}/execute-jobs", response_model=WorkItemSubmitRead, status_code=status.HTTP_202_ACCEPTED)
+def queue_execute_plan(plan_id: int, db: Session = Depends(get_db), principal: Principal = Depends(get_current_principal)) -> WorkItemSubmitRead:
+    """Queue automation-plan execution for a background worker."""
+
+    plan = automation_workflow_service.get_plan_or_404(db, plan_id)
+    require_workspace_role(db, plan.workspace_id, principal, WORKSPACE_WRITE_ROLES)
+    item = work_queue_service.enqueue(
+        db,
+        workspace_id=plan.workspace_id,
+        job_type="automation.execute",
+        payload={"plan_id": plan.id, "actor": principal.user_email},
+    )
+    return WorkItemSubmitRead(
+        work_item_id=item.id,
+        workspace_id=item.workspace_id,
+        job_type=item.job_type,
+        status=item.status,
+        created_at=item.created_at,
+    )
 
 
 def _parse_automation_json(value: str) -> dict[str, Any]:

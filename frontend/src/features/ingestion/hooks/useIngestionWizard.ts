@@ -1,10 +1,13 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaceSummary } from '../../workspace/api';
-import { listWorkspaceDatasets, runDatasetSql, uploadDatasetFile } from '../api';
+import { getIngestionJob, listWorkspaceDatasets, runDatasetSql, uploadDatasetFile } from '../api';
 import { wizardStages } from '../constants';
 import type { IngestionWizardProps, IngestionWizardState, PreviewSummary, WizardStage } from '../types';
 import { buildSuggestedSql, parseCsvPreview } from '../utils';
 import type { DashboardDraftPreview } from '../../../types/domain';
+
+const MAX_UPLOAD_POLL_ATTEMPTS = 60;
+const UPLOAD_POLL_DELAYS_MS = [1000, 1500, 2500, 4000, 5000];
 
 export function useIngestionWizard({
   apiBase,
@@ -34,6 +37,7 @@ export function useIngestionWizard({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const uploadPollToken = useRef(0);
 
   const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
   const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
@@ -44,6 +48,12 @@ export function useIngestionWizard({
   useEffect(() => {
     setQuerySql(queryTemplate);
   }, [queryTemplate]);
+
+  useEffect(() => {
+    return () => {
+      uploadPollToken.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +116,7 @@ export function useIngestionWizard({
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = event.target.files?.[0] ?? null;
+    uploadPollToken.current += 1;
     setSelectedFile(file);
     setUploadResult(null);
     setError(null);
@@ -150,23 +161,11 @@ export function useIngestionWizard({
         file: selectedFile,
       });
       setUploadResult(result);
-      setSelectedDatasetId(String(result.dataset_id));
-      setDatasets((previous) => [
-        {
-          id: result.dataset_id,
-          workspace_id: result.workspace_id,
-          name: result.dataset_name,
-          source_type: 'file',
-          state: result.state,
-          storage_path: result.storage_path,
-          created_at: result.created_at,
-        },
-        ...previous.filter((dataset) => dataset.id !== result.dataset_id),
-      ].slice(0, 4));
-      void getWorkspaceSummary(apiBase, userEmail, workspaceId).then(setWorkspaceSummary).catch(() => undefined);
-      onPrepareDashboard?.(result.dataset_name);
-      onStatusChange?.(`Dataset uploaded: ${result.dataset_name}`);
-      setSuccessMessage(`Uploaded ${result.dataset_name} and generated profile results.`);
+      onStatusChange?.(`Upload accepted: ${result.dataset_name}`);
+      setSuccessMessage(`Upload accepted. Profiling is ${result.current_step ?? result.status}.`);
+      const pollToken = uploadPollToken.current + 1;
+      uploadPollToken.current = pollToken;
+      void pollUploadJob(result, pollToken);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Failed to upload dataset');
     } finally {
@@ -290,6 +289,80 @@ export function useIngestionWizard({
     return selectedDataset?.name ?? uploadResult?.dataset_name ?? datasetName;
   }
 
+  async function pollUploadJob(initialResult: IngestionWizardState['uploadResult'], pollToken: number): Promise<void> {
+    if (!initialResult) {
+      return;
+    }
+
+    let latestResult = initialResult;
+    for (let attempt = 0; attempt < MAX_UPLOAD_POLL_ATTEMPTS; attempt += 1) {
+      await delay(getUploadPollDelay(attempt));
+      if (!isCurrentUploadPoll(pollToken)) {
+        return;
+      }
+      try {
+        const job = await getIngestionJob(apiBase, userEmail, latestResult.job_id);
+        if (!isCurrentUploadPoll(pollToken)) {
+          return;
+        }
+        latestResult = {
+          ...latestResult,
+          dataset_id: job.dataset_id,
+          dataset_name: job.dataset_name ?? latestResult.dataset_name,
+          status: job.status,
+          current_step: job.current_step,
+          progress_percent: job.progress_percent,
+          quality_score: job.quality_score,
+          row_count: job.row_count,
+          rejected_rows: job.rejected_rows,
+          storage_path: job.storage_path,
+          error_message: job.error_message,
+          started_at: job.started_at,
+          finished_at: job.finished_at,
+        };
+        setUploadResult(latestResult);
+
+        if (job.status === 'completed' && job.dataset_id) {
+          const refreshedDatasets = await listWorkspaceDatasets(apiBase, userEmail, workspaceId);
+          if (!isCurrentUploadPoll(pollToken)) {
+            return;
+          }
+          setDatasets(refreshedDatasets);
+          setSelectedDatasetId(String(job.dataset_id));
+          void getWorkspaceSummary(apiBase, userEmail, workspaceId)
+            .then((summary) => {
+              if (isCurrentUploadPoll(pollToken)) {
+                setWorkspaceSummary(summary);
+              }
+            })
+            .catch(() => undefined);
+          onPrepareDashboard?.(latestResult.dataset_name);
+          onStatusChange?.(`Dataset profiled: ${latestResult.dataset_name}`);
+          setSuccessMessage(`Profile complete for ${latestResult.dataset_name}.`);
+          return;
+        }
+
+        if (job.status === 'failed') {
+          setError(job.error_message ?? 'Ingestion job failed');
+          return;
+        }
+      } catch (requestError) {
+        if (isCurrentUploadPoll(pollToken)) {
+          setError(requestError instanceof Error ? requestError.message : 'Failed to refresh ingestion job');
+        }
+        return;
+      }
+    }
+
+    if (isCurrentUploadPoll(pollToken)) {
+      setSuccessMessage('Upload is still processing. Refresh the job list for the latest state.');
+    }
+  }
+
+  function isCurrentUploadPoll(pollToken: number): boolean {
+    return uploadPollToken.current === pollToken;
+  }
+
   const state: IngestionWizardState = {
     activeDatasetId,
     approvalChecked,
@@ -355,3 +428,13 @@ function resolveCurrentStage({
 }
 
 export type IngestionWizardViewModel = ReturnType<typeof useIngestionWizard>;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function getUploadPollDelay(attempt: number): number {
+  return UPLOAD_POLL_DELAYS_MS[Math.min(attempt, UPLOAD_POLL_DELAYS_MS.length - 1)];
+}

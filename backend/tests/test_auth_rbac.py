@@ -106,7 +106,7 @@ def test_rbac_allows_generate_for_member_and_blocks_admin_only_action(client) ->
         settings.api_keys_csv = original_keys
 
 
-def test_core_data_routes_require_workspace_membership(client) -> None:
+def test_core_data_routes_require_workspace_membership(client, complete_upload) -> None:
     original_enabled = settings.auth_enabled
     original_keys = settings.api_keys_csv
     settings.auth_enabled = True
@@ -129,9 +129,9 @@ def test_core_data_routes_require_workspace_membership(client) -> None:
             files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
             headers=owner_headers,
         )
-        assert upload_response.status_code == 201
-        dataset_id = upload_response.json()["dataset_id"]
-        job_id = upload_response.json()["job_id"]
+        upload_body = complete_upload(upload_response, headers=owner_headers)
+        dataset_id = upload_body["dataset_id"]
+        job_id = upload_body["job_id"]
 
         blocked_upload = client.post(
             "/api/v1/ingestion/upload",

@@ -1,7 +1,7 @@
 from io import BytesIO
 
 
-def test_csv_upload_creates_dataset_and_report(client) -> None:
+def test_csv_upload_creates_dataset_and_report(client, complete_upload) -> None:
     response = client.post(
         "/api/v1/ingestion/upload",
         data={"workspace_id": 1, "dataset_name": "sales"},
@@ -20,13 +20,17 @@ def test_csv_upload_creates_dataset_and_report(client) -> None:
         files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
     )
 
-    assert response.status_code == 201
-    body = response.json()
+    assert response.status_code == 202
+    accepted = response.json()
+    assert accepted["status"] == "queued"
+    assert accepted["work_item_id"] > 0
+    body = complete_upload(response)
     assert body["workspace_id"] == workspace_id
     assert body["dataset_name"] == "sales"
     assert body["job_id"] > 0
     assert body["status"] == "completed"
     assert body["finished_at"] is not None
+    assert body["progress_percent"] == 100
     assert body["row_count"] == 2
     assert body["quality_score"] == 100
     assert body["rejected_rows"] == 0

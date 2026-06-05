@@ -20,6 +20,7 @@ from app.models.business import BusinessTranslation
 from app.models.automation import AutomationPlan
 from app.models.recommendation import Recommendation
 from app.models.guidance import GuidancePlan
+from app.models.work_item import WorkItem
 
 __all__ = [
     "DataQualityReport",
@@ -52,4 +53,5 @@ __all__ = [
     "AutomationPlan",
     "Recommendation",
     "GuidancePlan",
+    "WorkItem",
 ]
