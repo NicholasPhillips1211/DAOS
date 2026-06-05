@@ -193,3 +193,91 @@ def test_query_dashboard_and_automation_emit_lifecycle_metadata(client) -> None:
     context = ai_context_response.json()[0]["context"]
     assert context["objective"] == "Monitor sales quality"
     assert context["plan"]["trace"]["grounding"]["signal_snapshot"]["dataset_count"] == 1
+
+
+def test_query_execution_history_records_lineage_and_saved_queries(client) -> None:
+    workspace_response = client.post(
+        "/api/v1/workspaces",
+        json={"name": "query-history-ws", "description": "query lineage tests"},
+    )
+    assert workspace_response.status_code == 201
+    workspace_id = workspace_response.json()["id"]
+
+    upload_response = client.post(
+        "/api/v1/ingestion/upload",
+        data={"workspace_id": workspace_id, "dataset_name": "sales"},
+        files={"file": ("sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
+    )
+    assert upload_response.status_code == 201
+    dataset_id = upload_response.json()["dataset_id"]
+
+    save_response = client.post(
+        "/api/v1/analytics/saved-queries",
+        json={
+            "workspace_id": workspace_id,
+            "dataset_id": dataset_id,
+            "name": "Sales by id",
+            "sql_text": "SELECT id, amount FROM dataset ORDER BY id",
+        },
+    )
+    assert save_response.status_code == 201
+    saved_query = save_response.json()
+    assert saved_query["name"] == "Sales by id"
+    assert saved_query["dataset_id"] == dataset_id
+
+    saved_list_response = client.get(
+        "/api/v1/analytics/saved-queries",
+        params={"workspace_id": workspace_id, "dataset_id": dataset_id},
+    )
+    assert saved_list_response.status_code == 200
+    assert saved_list_response.headers["X-Total-Count"] == "1"
+    assert saved_list_response.json()[0]["id"] == saved_query["id"]
+
+    query_response = client.post(
+        f"/api/v1/datasets/{dataset_id}/query",
+        json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
+    )
+    assert query_response.status_code == 200
+
+    history_response = client.get(
+        "/api/v1/analytics/query-executions",
+        params={"workspace_id": workspace_id, "dataset_id": dataset_id},
+    )
+    assert history_response.status_code == 200
+    assert history_response.headers["X-Total-Count"] == "1"
+    execution = history_response.json()[0]
+    assert execution["dataset_id"] == dataset_id
+    assert execution["route"] == "datasets"
+    assert execution["row_count"] == 2
+    assert execution["column_count"] == 2
+    assert execution["duration_ms"] >= 0
+
+    usage_response = client.get(
+        "/api/v1/metadata/usage",
+        params={
+            "workspace_id": workspace_id,
+            "asset_type": "dataset",
+            "asset_id": dataset_id,
+            "action": "dataset.query_executed",
+        },
+    )
+    assert usage_response.status_code == 200
+    usage = usage_response.json()[0]
+    assert usage["details"]["query_execution_id"] == execution["id"]
+    assert usage["details"]["route"] == "datasets"
+    assert usage["details"]["row_count"] == 2
+
+    lineage_response = client.get(
+        "/api/v1/metadata/lineage",
+        params={"workspace_id": workspace_id, "asset_type": "dataset", "asset_id": dataset_id},
+    )
+    assert lineage_response.status_code == 200
+    query_lineage = [
+        record
+        for record in lineage_response.json()
+        if record["downstream_type"] == "query_execution" and record["downstream_id"] == execution["id"]
+    ]
+    assert len(query_lineage) == 1
+    assert query_lineage[0]["upstream_type"] == "dataset"
+    assert query_lineage[0]["upstream_id"] == dataset_id
+    assert query_lineage[0]["relation_type"] == "queried_by"

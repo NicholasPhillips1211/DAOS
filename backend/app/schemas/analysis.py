@@ -47,3 +47,43 @@ class DatasetStatisticsRead(BaseModel):
     row_count: int
     column_count: int
     columns: list[ColumnStatistic]
+
+
+class QueryExecutionRead(BaseModel):
+    """Expose query history with operational execution facts."""
+
+    id: int
+    workspace_id: int
+    dataset_id: int
+    sql_text: str
+    route: str
+    row_count: int
+    column_count: int
+    duration_ms: int
+    actor: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SavedQueryCreate(BaseModel):
+    """Capture a named SQL statement for reuse."""
+
+    workspace_id: int
+    dataset_id: int
+    name: str
+    sql_text: str
+
+
+class SavedQueryRead(BaseModel):
+    """Expose a saved query in the analysis workspace."""
+
+    id: int
+    workspace_id: int
+    dataset_id: int
+    name: str
+    sql_text: str
+    created_by: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

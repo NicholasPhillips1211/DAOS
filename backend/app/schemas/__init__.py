@@ -1,5 +1,13 @@
 from app.schemas.ingestion import IngestionJobRead, IngestionUploadRead
-from app.schemas.analysis import ColumnStatistic, DatasetStatisticsRead, InsightCreate, InsightRead
+from app.schemas.analysis import (
+    ColumnStatistic,
+    DatasetStatisticsRead,
+    InsightCreate,
+    InsightRead,
+    QueryExecutionRead,
+    SavedQueryCreate,
+    SavedQueryRead,
+)
 from app.schemas.automation import AutomationGenerateRequest, AutomationPlanRead
 from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.schemas.dataset import DatasetQueryRequest, DatasetQueryResponse
@@ -26,6 +34,9 @@ __all__ = [
     "DatasetQueryResponse",
     "ColumnStatistic",
     "DatasetStatisticsRead",
+    "QueryExecutionRead",
+    "SavedQueryCreate",
+    "SavedQueryRead",
     "FeatureImportanceRead",
     "ModelTrainRequest",
     "ModelTrainResponse",

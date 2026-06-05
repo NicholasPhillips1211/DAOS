@@ -222,6 +222,76 @@ class MetadataService:
         db.refresh(record)
         return record
 
+    def record_lineage_record(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        upstream_type: str,
+        upstream_id: int,
+        downstream_type: str,
+        downstream_id: int,
+        relation_type: str,
+        details: dict[str, Any] | None = None,
+    ) -> MetadataLineageRecord:
+        """Record a dependency edge between lifecycle assets."""
+
+        record = self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type=upstream_type,
+            upstream_id=upstream_id,
+            downstream_type=downstream_type,
+            downstream_id=downstream_id,
+            relation_type=relation_type,
+            details=details,
+        )
+        db.commit()
+        db.refresh(record)
+        return record
+
+    def record_query_execution_metadata(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        dataset_id: int,
+        query_execution_id: int,
+        actor: str | None,
+        details: dict[str, Any],
+    ) -> None:
+        """Record usage and lineage for one executed SQL query."""
+
+        self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type="dataset",
+            asset_id=dataset_id,
+            action="dataset.query_executed",
+            actor=actor,
+            details={"query_execution_id": query_execution_id, **details},
+        )
+        self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type="dataset",
+            upstream_id=dataset_id,
+            downstream_type="query_execution",
+            downstream_id=query_execution_id,
+            relation_type="queried_by",
+            details=details,
+        )
+        event = AuditEvent(
+            workspace_id=workspace_id,
+            event_type="metadata.analysis.query_executed",
+            actor=actor,
+            resource_type="query_execution",
+            resource_id=query_execution_id,
+            details=json.dumps({"dataset_id": dataset_id, **details}, sort_keys=True),
+        )
+        db.add(event)
+        db.commit()
+
     def record_ai_context(
         self,
         db: Session,

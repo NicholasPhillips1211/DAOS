@@ -14,7 +14,7 @@ This review covers the architecture as implemented in the repository after the s
 | --- | --- | --- |
 | Backend install | `.\.venv\Scripts\python.exe -m pip install -e .\backend[dev]` | Passed after sandbox escalation; installed declared backend runtime and dev dependencies. |
 | Backend lint | `.\.venv\Scripts\python.exe -m ruff check backend\app backend\tests` | Passed. |
-| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 31 tests. |
+| Backend tests | `.\.venv\Scripts\python.exe -m pytest backend\tests -q` | Passed: 32 tests. |
 | Frontend build | `npm.cmd run build` from `frontend/` | Passed after sandbox escalation. Vite emitted a chunk-size warning for a 503.42 kB JS asset. |
 | Backend startup | `AUTH_ENABLED=false .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000` | Passed; `/api/v1/health` returned `{"status":"ok","service":"daos-backend"}`. |
 | Frontend startup | `npm.cmd run dev -- --host 127.0.0.1 --port 5173` | Passed; `http://127.0.0.1:5173` returned HTTP 200. |
@@ -103,13 +103,14 @@ Implemented flow:
 - Dataset query endpoints can run SQL against uploaded datasets.
 - Tests cover querying uploaded CSV data through lakehouse and dataset query routes.
 - Dataset statistics can be generated for uploaded CSV files.
-- Dataset and lakehouse query execution now records metadata usage events.
+- Dataset and lakehouse query execution now records query execution history, row/column counts, duration, metadata usage, and dataset-to-query lineage.
+- `GET /api/v1/analytics/query-executions` exposes workspace-scoped query history.
+- `GET /api/v1/analytics/saved-queries` and `POST /api/v1/analytics/saved-queries` support reusable SQL statements.
 
 Gaps:
 
-- Query history, saved queries, query execution metrics, and query-to-dataset dependency records are not first-class models yet.
 - Analytics statistics currently load CSV rows into memory.
-- SQL execution emits usage metadata, but query lineage and persisted query execution records are still shallow.
+- SQL lineage currently records the source dataset for an execution, but not saved-query-to-dashboard or multi-dataset dependencies.
 
 ### Information Intelligence And Automation
 
@@ -190,9 +191,9 @@ The classification is useful, but several workflow services are still thin. The 
 
 ## Architecture Risks
 
-- Metadata is now a first-class core, but it is still early and does not yet cover ownership, query lineage, dashboard dependencies, or freshness.
+- Metadata is now a first-class core, but it is still early and does not yet cover ownership, dashboard dependencies, or freshness.
 - Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
-- SQL analytics lacks query-history and lineage models.
+- SQL analytics has query history and source-dataset lineage, but not richer saved-query or dashboard dependency lineage.
 - AI features are not yet systematically grounded in DAOS metadata.
 - Dashboards are records and UI workflows, not operational assets with dependencies, ownership, usage, and impact analysis.
 - Frontend tests are absent, and frontend lint is not configured.
@@ -203,7 +204,7 @@ The classification is useful, but several workflow services are still thin. The 
 1. Move canonical ingestion work out of the request path through a worker/job runner and durable retry state.
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
 3. Complete Information Governance metadata with ownership, stewardship, classification, freshness, and migration coverage.
-4. Strengthen Information Analysis with query history, saved queries, execution metrics, dataset dependency tracking, and query lineage.
+4. Strengthen Information Analysis with saved-query-to-dashboard dependencies, repeatable result persistence, and richer SQL lineage as connector support expands.
 5. Strengthen Information Operationalization with dashboard dependency metadata, KPI ownership, and dataset-change impact checks.
 6. Build the Information Intelligence context builder before adding new AI UI: source-grounded response format, confidence, affected assets, and recommended next action.
 7. Add metrics-ready observability for ingestion jobs, query execution, metadata events, AI requests, and dashboard loads.

@@ -34,6 +34,7 @@ Features that do not improve this lifecycle should not be prioritized. Existing 
 - Consolidated ingestion onto `IngestionWorkflowService`, removed the duplicate ingestion service, added queryable ingestion jobs, and streamed upload persistence.
 - Added first-class metadata repository boundaries and lifecycle metadata records for schemas, lineage, usage, and AI context.
 - Routed ingestion, SQL query execution, dashboard creation, and automation generation through the metadata core.
+- Added query execution history, saved queries, execution duration capture, and dataset-to-query lineage metadata.
 - Added `docs/ARCHITECTURE_REVIEW.md`.
 - Added `docs/TECHNICAL_DEBT_REGISTER.md`.
 - Validated backend lint, backend tests, frontend build, and local startup endpoints.
@@ -97,7 +98,7 @@ Completed:
 Remaining:
 
 - Add dataset ownership and stewardship metadata.
-- Add SQL query execution, saved query, and query-to-dataset lineage models.
+- Extend SQL lineage beyond source dataset dependencies into saved queries, dashboards, and downstream outputs.
 - Add dashboard dependency records, KPI ownership, and dataset-change impact metadata.
 - Build a reusable AI context builder from metadata, profiles, lineage, usage, dashboards, and governance state.
 - Add operational metrics around metadata emission and record freshness.
@@ -111,12 +112,20 @@ Exit criteria:
 
 ### Information Analysis Track
 
+Completed:
+
 - Add query execution records.
 - Add query history.
 - Add saved queries.
-- Track dataset dependencies from SQL.
+- Track dataset dependencies from SQL execution.
 - Emit usage and lineage metadata from query execution.
-- Add query performance metrics.
+- Capture basic query duration metrics.
+
+Remaining:
+
+- Add saved-query-to-dashboard dependencies.
+- Add query result persistence where useful for repeatable analysis.
+- Add richer SQL parsing for multi-dataset lineage when connector support expands.
 
 ### Information Intelligence Track
 

@@ -1,4 +1,4 @@
-from app.models.analysis import Insight
+from app.models.analysis import Insight, QueryExecution, SavedQuery
 from app.models.ingestion import DataQualityReport, IngestionJob
 from app.models.metadata import (
     Dataset,
@@ -25,6 +25,8 @@ __all__ = [
     "DataQualityReport",
     "IngestionJob",
     "Insight",
+    "QueryExecution",
+    "SavedQuery",
     "Dataset",
     "DatasetState",
     "MetadataAIContextRecord",

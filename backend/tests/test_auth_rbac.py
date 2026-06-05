@@ -149,6 +149,21 @@ def test_core_data_routes_require_workspace_membership(client) -> None:
         assert client.get("/api/v1/datasets", headers=owner_headers).status_code == 400
         assert client.get(f"/api/v1/datasets?workspace_id={workspace_id}", headers=outsider_headers).status_code == 403
         assert client.get(f"/api/v1/datasets/{dataset_id}/quality", headers=outsider_headers).status_code == 403
+        assert client.get("/api/v1/analytics/query-executions", headers=owner_headers).status_code == 400
+        assert client.get(f"/api/v1/analytics/query-executions?workspace_id={workspace_id}", headers=outsider_headers).status_code == 403
+        assert client.get("/api/v1/analytics/saved-queries", headers=owner_headers).status_code == 400
+        assert client.get(f"/api/v1/analytics/saved-queries?workspace_id={workspace_id}", headers=outsider_headers).status_code == 403
+        blocked_saved_query = client.post(
+            "/api/v1/analytics/saved-queries",
+            json={
+                "workspace_id": workspace_id,
+                "dataset_id": dataset_id,
+                "name": "Blocked",
+                "sql_text": "SELECT id FROM dataset",
+            },
+            headers=outsider_headers,
+        )
+        assert blocked_saved_query.status_code == 403
 
         blocked_dataset_query = client.post(
             f"/api/v1/datasets/{dataset_id}/query",

@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
@@ -13,10 +15,11 @@ from app.core.auth import (
 from app.core.dependencies import get_db, get_pagination
 from app.models.metadata import Dataset
 from app.schemas.dataset import DatasetCreate, DatasetQueryRequest, DatasetQueryResponse, DatasetRead
+from app.services.analytics_service import AnalyticsService
+from app.services.analytics_workflow_service import AnalyticsWorkflowService
 from app.services.audit_service import AuditService
 from app.services.dataset_workflow_service import DatasetWorkflowService
 from app.services.lakehouse_service import LakehouseService
-from app.services.metadata_service import MetadataService
 from app.services.workspace_workflow_service import WorkspaceWorkflowService
 
 router = APIRouter()
@@ -24,7 +27,7 @@ dataset_workflow_service = DatasetWorkflowService()
 lakehouse_service = LakehouseService()
 workspace_workflow_service = WorkspaceWorkflowService(lakehouse_service)
 audit_service = AuditService()
-metadata_service = MetadataService()
+analytics_workflow_service = AnalyticsWorkflowService(AnalyticsService())
 
 
 @router.get("", response_model=list[DatasetRead])
@@ -74,7 +77,9 @@ def query_dataset(
     """Execute SQL against a dataset file through the app-facing dataset route."""
 
     require_model_workspace_role(db, Dataset, dataset_id, principal, WORKSPACE_READ_ROLES, model_name="Dataset")
+    started_at = perf_counter()
     dataset, columns, rows = workspace_workflow_service.query_dataset(db, dataset_id, payload.sql)
+    duration_ms = int((perf_counter() - started_at) * 1000)
 
     audit_service.log_event(
         dataset.workspace_id,
@@ -85,14 +90,15 @@ def query_dataset(
         details=f"Returned {len(rows)} rows",
         db=db,
     )
-    metadata_service.record_usage_event(
+    analytics_workflow_service.record_query_execution(
         db,
-        workspace_id=dataset.workspace_id,
-        asset_type="dataset",
-        asset_id=dataset.id,
-        action="dataset.query_executed",
+        dataset=dataset,
+        sql_text=payload.sql,
+        route="datasets",
+        row_count=len(rows),
+        column_count=len(columns),
+        duration_ms=duration_ms,
         actor=principal.user_email,
-        details={"route": "datasets", "row_count": len(rows), "columns": columns},
     )
 
     return DatasetQueryResponse(columns=columns, rows=rows, row_count=len(rows))
