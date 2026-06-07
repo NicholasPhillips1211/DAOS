@@ -10,6 +10,7 @@ from app.models.governance import AuditEvent
 from app.models.metadata import (
     MetadataAIContextRecord,
     MetadataLineageRecord,
+    MetadataOwnershipRecord,
     MetadataSchemaRecord,
     MetadataUsageEvent,
 )
@@ -125,6 +126,7 @@ class MetadataService:
         metadata = profile.get("metadata", {})
         schema = metadata.get("schema") or self._schema_from_profile(profile)
         profile_fingerprint = metadata.get("profile_fingerprint")
+        stewardship_status = "active" if actor else "unassigned"
         event_details = {
             "job_id": job_id,
             "dataset_name": dataset_name,
@@ -132,6 +134,9 @@ class MetadataService:
             "row_count": profile.get("row_count", 0),
             "rejected_rows": profile.get("rejected_rows", 0),
             "quality_score": profile.get("quality_score", 0),
+            "owner_email": actor,
+            "steward_email": actor,
+            "stewardship_status": stewardship_status,
             "status": "completed",
         }
 
@@ -173,6 +178,21 @@ class MetadataService:
                 "quality_score": profile.get("quality_score", 0),
             },
         )
+        self.repository.add_ownership_record(
+            db,
+            workspace_id=workspace_id,
+            asset_type="dataset",
+            asset_id=dataset_id,
+            owner_email=actor,
+            steward_email=actor,
+            stewardship_status=stewardship_status,
+            details={
+                "job_id": job_id,
+                "dataset_name": dataset_name,
+                "source_name": source_name,
+                "profile_fingerprint": profile_fingerprint,
+            },
+        )
         self.repository.add_ai_context_record(
             db,
             workspace_id=workspace_id,
@@ -187,6 +207,9 @@ class MetadataService:
                 "rejected_rows": profile.get("rejected_rows", 0),
                 "quality_score": profile.get("quality_score", 0),
                 "issues": profile.get("issues", []),
+                "owner_email": actor,
+                "steward_email": actor,
+                "stewardship_status": stewardship_status,
                 "profile_fingerprint": profile_fingerprint,
             },
         )
@@ -224,6 +247,34 @@ class MetadataService:
             asset_id=asset_id,
             action=action,
             actor=actor,
+            details=details,
+        )
+        db.commit()
+        db.refresh(record)
+        return record
+
+    def record_ownership_record(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str,
+        asset_id: int,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str = "unassigned",
+        details: dict[str, Any] | None = None,
+    ) -> MetadataOwnershipRecord:
+        """Record ownership and stewardship facts for a governed asset."""
+
+        record = self.repository.add_ownership_record(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            owner_email=owner_email,
+            steward_email=steward_email,
+            stewardship_status=stewardship_status,
             details=details,
         )
         db.commit()
@@ -432,6 +483,56 @@ class MetadataService:
             asset_type=asset_type,
             asset_id=asset_id,
             action=action,
+        )
+
+    def list_ownership_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataOwnershipRecord]:
+        """Delegate ownership reads so governance and AI workflows share one access path."""
+
+        return self.repository.list_ownership_records(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            owner_email=owner_email,
+            steward_email=steward_email,
+            stewardship_status=stewardship_status,
+            limit=limit,
+            offset=offset,
+        )
+
+    def count_ownership_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str | None = None,
+    ) -> int:
+        """Count ownership records using the same filters exposed by the API."""
+
+        return self.repository.count_ownership_records(
+            db,
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            owner_email=owner_email,
+            steward_email=steward_email,
+            stewardship_status=stewardship_status,
         )
 
     def list_ai_context_records(

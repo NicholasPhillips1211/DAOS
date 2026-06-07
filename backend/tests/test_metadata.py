@@ -100,6 +100,19 @@ def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload)
     assert usage_record["details"]["job_id"] == job_id
     assert usage_record["details"]["quality_score"] == 100
 
+    ownership_response = client.get(
+        "/api/v1/metadata/ownership",
+        params={"workspace_id": workspace_id, "asset_type": "dataset", "asset_id": dataset_id},
+    )
+    assert ownership_response.status_code == 200
+    assert ownership_response.headers["X-Total-Count"] == "1"
+    ownership_record = ownership_response.json()[0]
+    assert ownership_record["owner_email"] == "dev@local"
+    assert ownership_record["steward_email"] == "dev@local"
+    assert ownership_record["stewardship_status"] == "active"
+    assert ownership_record["details"]["job_id"] == job_id
+    assert ownership_record["details"]["source_name"] == "sales.csv"
+
     ai_context_response = client.get(
         "/api/v1/metadata/ai-context",
         params={
@@ -338,9 +351,13 @@ def test_ai_context_builder_uses_lifecycle_metadata(client, complete_upload) -> 
     assert body["confidence_score"] >= 0.8
     assert "datasets" in body["sources"]
     assert "metadata.lineage" in body["sources"]
+    assert "metadata.ownership" in body["sources"]
     assert "query_executions" in body["sources"]
     assert "dashboards" in body["sources"]
     assert body["context"]["lifecycle"]["information_collection"]["dataset_count"] == 1
+    governance_context = body["context"]["lifecycle"]["information_governance"]
+    assert governance_context["ownership_record_count"] == 1
+    assert governance_context["recent_ownership"][0]["owner_email"] == "dev@local"
     assert body["context"]["lifecycle"]["information_analysis"]["query_execution_count"] == 1
     assert body["context"]["lifecycle"]["information_operationalization"]["dashboard_count"] == 1
     assert body["context"]["lifecycle"]["information_operationalization"]["dashboards"][0]["kpi_owners"][0]["owner_email"] == "revenue@example.com"

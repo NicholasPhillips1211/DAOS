@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.metadata import (
     MetadataAIContextRecord,
     MetadataLineageRecord,
+    MetadataOwnershipRecord,
     MetadataSchemaRecord,
     MetadataUsageEvent,
 )
@@ -97,6 +98,32 @@ class MetadataRepository:
             asset_id=asset_id,
             action=action,
             actor=actor,
+            details_json=self._dump_json(details or {}),
+        )
+        db.add(record)
+        return record
+
+    def add_ownership_record(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str,
+        asset_id: int,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str = "unassigned",
+        details: dict[str, Any] | None = None,
+    ) -> MetadataOwnershipRecord:
+        """Stage ownership and stewardship facts for a governed asset."""
+
+        record = MetadataOwnershipRecord(
+            workspace_id=workspace_id,
+            asset_type=asset_type,
+            asset_id=asset_id,
+            owner_email=owner_email,
+            steward_email=steward_email,
+            stewardship_status=stewardship_status,
             details_json=self._dump_json(details or {}),
         )
         db.add(record)
@@ -252,6 +279,60 @@ class MetadataRepository:
             query = query.filter(MetadataUsageEvent.asset_id == asset_id)
         if action:
             query = query.filter(MetadataUsageEvent.action == action)
+        return query.count()
+
+    def list_ownership_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[MetadataOwnershipRecord]:
+        """Return ownership records newest-first for governance and AI grounding."""
+
+        query = db.query(MetadataOwnershipRecord).filter(MetadataOwnershipRecord.workspace_id == workspace_id)
+        if asset_type:
+            query = query.filter(MetadataOwnershipRecord.asset_type == asset_type)
+        if asset_id is not None:
+            query = query.filter(MetadataOwnershipRecord.asset_id == asset_id)
+        if owner_email:
+            query = query.filter(MetadataOwnershipRecord.owner_email == owner_email)
+        if steward_email:
+            query = query.filter(MetadataOwnershipRecord.steward_email == steward_email)
+        if stewardship_status:
+            query = query.filter(MetadataOwnershipRecord.stewardship_status == stewardship_status)
+        return query.order_by(MetadataOwnershipRecord.created_at.desc()).limit(limit).offset(offset).all()
+
+    def count_ownership_records(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        asset_type: str | None = None,
+        asset_id: int | None = None,
+        owner_email: str | None = None,
+        steward_email: str | None = None,
+        stewardship_status: str | None = None,
+    ) -> int:
+        """Count ownership records using the same filters as list reads."""
+
+        query = db.query(MetadataOwnershipRecord).filter(MetadataOwnershipRecord.workspace_id == workspace_id)
+        if asset_type:
+            query = query.filter(MetadataOwnershipRecord.asset_type == asset_type)
+        if asset_id is not None:
+            query = query.filter(MetadataOwnershipRecord.asset_id == asset_id)
+        if owner_email:
+            query = query.filter(MetadataOwnershipRecord.owner_email == owner_email)
+        if steward_email:
+            query = query.filter(MetadataOwnershipRecord.steward_email == steward_email)
+        if stewardship_status:
+            query = query.filter(MetadataOwnershipRecord.stewardship_status == stewardship_status)
         return query.count()
 
     def list_ai_context_records(

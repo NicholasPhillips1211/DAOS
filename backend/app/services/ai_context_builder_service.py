@@ -120,6 +120,7 @@ class AIContextBuilderService:
         schema_records = self.metadata_service.list_schema_records(db, workspace_id=workspace_id, limit=10)
         lineage_records = self.metadata_service.list_lineage_records(db, workspace_id=workspace_id, limit=25)
         usage_events = self.metadata_service.list_usage_events(db, workspace_id=workspace_id, limit=25)
+        ownership_records = self.metadata_service.list_ownership_records(db, workspace_id=workspace_id, limit=25)
         audit_events = (
             db.query(AuditEvent)
             .filter(AuditEvent.workspace_id == workspace_id)
@@ -138,6 +139,7 @@ class AIContextBuilderService:
             "schema_record_count": self.metadata_service.count_schema_records(db, workspace_id=workspace_id),
             "lineage_record_count": self.metadata_service.count_lineage_records(db, workspace_id=workspace_id),
             "usage_event_count": self.metadata_service.count_usage_events(db, workspace_id=workspace_id),
+            "ownership_record_count": self.metadata_service.count_ownership_records(db, workspace_id=workspace_id),
             "recent_schemas": [
                 {
                     "asset_type": record.asset_type,
@@ -165,6 +167,17 @@ class AIContextBuilderService:
                     "details": self.metadata_service.parse_record_json(record.details_json),
                 }
                 for record in usage_events
+            ],
+            "recent_ownership": [
+                {
+                    "asset_type": record.asset_type,
+                    "asset_id": record.asset_id,
+                    "owner_email": record.owner_email,
+                    "steward_email": record.steward_email,
+                    "stewardship_status": record.stewardship_status,
+                    "details": self.metadata_service.parse_record_json(record.details_json),
+                }
+                for record in ownership_records
             ],
             "recent_audit_events": [
                 {
@@ -332,6 +345,8 @@ class AIContextBuilderService:
             sources.append("metadata.schemas")
         if lifecycle["information_governance"]["lineage_record_count"]:
             sources.append("metadata.lineage")
+        if lifecycle["information_governance"]["ownership_record_count"]:
+            sources.append("metadata.ownership")
         if lifecycle["information_analysis"]["query_execution_count"]:
             sources.append("query_executions")
         if lifecycle["information_operationalization"]["dashboard_count"]:
@@ -348,6 +363,11 @@ class AIContextBuilderService:
             actions.append("Collect the first governed dataset for this workspace.")
         if lifecycle["information_governance"]["schema_record_count"] == 0:
             actions.append("Register schema metadata so AI outputs can cite trusted fields.")
+        if (
+            lifecycle["information_collection"]["dataset_count"] > 0
+            and lifecycle["information_governance"]["ownership_record_count"] == 0
+        ):
+            actions.append("Assign dataset owners and stewards so governed assets have accountable operators.")
         if lifecycle["information_analysis"]["query_execution_count"] == 0:
             actions.append("Run an initial SQL analysis to create analytical evidence.")
         if lifecycle["information_operationalization"]["dashboard_count"] == 0:

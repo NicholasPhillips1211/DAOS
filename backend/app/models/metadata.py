@@ -115,6 +115,22 @@ class MetadataUsageEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MetadataOwnershipRecord(Base):
+    """Ownership and stewardship facts for governed information assets."""
+
+    __tablename__ = "metadata_ownership_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    asset_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    owner_email: Mapped[str | None] = mapped_column(String(320), index=True)
+    steward_email: Mapped[str | None] = mapped_column(String(320), index=True)
+    stewardship_status: Mapped[str] = mapped_column(String(64), nullable=False, default="unassigned", index=True)
+    details_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MetadataAIContextRecord(Base):
     """Grounding snapshots for AI and recommendation workflows."""
 

@@ -63,6 +63,20 @@ class MetadataUsageEventRead(BaseModel):
     created_at: datetime
 
 
+class MetadataOwnershipRecordRead(BaseModel):
+    """Ownership and stewardship record for a governed information asset."""
+
+    id: int
+    workspace_id: int
+    asset_type: str
+    asset_id: int
+    owner_email: str | None
+    steward_email: str | None
+    stewardship_status: str
+    details: dict[str, Any]
+    created_at: datetime
+
+
 class MetadataAIContextRecordRead(BaseModel):
     """AI grounding context captured from governed lifecycle metadata."""
 

@@ -12,6 +12,7 @@ from app.schemas.metadata import (
     MetadataAIContextRecordRead,
     MetadataEventRead,
     MetadataLineageRecordRead,
+    MetadataOwnershipRecordRead,
     MetadataSchemaRecordRead,
     MetadataUsageEventRead,
 )
@@ -180,6 +181,59 @@ def list_metadata_usage(
             asset_id=record.asset_id,
             action=record.action,
             actor=record.actor,
+            details=metadata_service.parse_record_json(record.details_json),
+            created_at=record.created_at,
+        )
+        for record in records
+    ]
+
+
+@router.get("/ownership", response_model=list[MetadataOwnershipRecordRead])
+def list_metadata_ownership(
+    response: Response,
+    workspace_id: int = Query(..., description="Workspace scope for ownership retrieval"),
+    asset_type: str | None = Query(default=None, description="Asset type filter"),
+    asset_id: int | None = Query(default=None, description="Asset id filter"),
+    owner_email: str | None = Query(default=None, description="Owner email filter"),
+    steward_email: str | None = Query(default=None, description="Steward email filter"),
+    stewardship_status: str | None = Query(default=None, description="Stewardship status filter"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+    pagination: dict = Depends(get_pagination),
+) -> list[MetadataOwnershipRecordRead]:
+    """Expose ownership and stewardship metadata for governed information assets."""
+
+    require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
+    total = metadata_service.count_ownership_records(
+        db,
+        workspace_id=workspace_id,
+        asset_type=asset_type,
+        asset_id=asset_id,
+        owner_email=owner_email,
+        steward_email=steward_email,
+        stewardship_status=stewardship_status,
+    )
+    response.headers["X-Total-Count"] = str(total)
+    records = metadata_service.list_ownership_records(
+        db,
+        workspace_id=workspace_id,
+        asset_type=asset_type,
+        asset_id=asset_id,
+        owner_email=owner_email,
+        steward_email=steward_email,
+        stewardship_status=stewardship_status,
+        limit=pagination["limit"],
+        offset=pagination["offset"],
+    )
+    return [
+        MetadataOwnershipRecordRead(
+            id=record.id,
+            workspace_id=record.workspace_id,
+            asset_type=record.asset_type,
+            asset_id=record.asset_id,
+            owner_email=record.owner_email,
+            steward_email=record.steward_email,
+            stewardship_status=record.stewardship_status,
             details=metadata_service.parse_record_json(record.details_json),
             created_at=record.created_at,
         )
