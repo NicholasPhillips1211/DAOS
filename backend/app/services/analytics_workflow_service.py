@@ -153,6 +153,15 @@ class AnalyticsWorkflowService:
         db.add(saved_query)
         db.commit()
         db.refresh(saved_query)
+        self.metadata_service.record_saved_query_metadata(
+            db,
+            workspace_id=workspace_id,
+            dataset_id=dataset_id,
+            saved_query_id=saved_query.id,
+            name=saved_query.name,
+            sql_text=saved_query.sql_text,
+            actor=created_by,
+        )
         return saved_query
 
     def list_saved_queries(

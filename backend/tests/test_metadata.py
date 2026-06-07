@@ -244,6 +244,18 @@ def test_query_execution_history_records_lineage_and_saved_queries(client, compl
     assert saved_list_response.headers["X-Total-Count"] == "1"
     assert saved_list_response.json()[0]["id"] == saved_query["id"]
 
+    saved_query_usage_response = client.get(
+        "/api/v1/metadata/usage",
+        params={
+            "workspace_id": workspace_id,
+            "asset_type": "saved_query",
+            "asset_id": saved_query["id"],
+            "action": "saved_query.created",
+        },
+    )
+    assert saved_query_usage_response.status_code == 200
+    assert saved_query_usage_response.json()[0]["details"]["dataset_id"] == dataset_id
+
     query_response = client.post(
         f"/api/v1/datasets/{dataset_id}/query",
         json={"sql": "SELECT id, amount FROM dataset ORDER BY id"},
@@ -278,6 +290,36 @@ def test_query_execution_history_records_lineage_and_saved_queries(client, compl
     assert usage["details"]["route"] == "datasets"
     assert usage["details"]["row_count"] == 2
 
+    query_result_usage_response = client.get(
+        "/api/v1/metadata/usage",
+        params={
+            "workspace_id": workspace_id,
+            "asset_type": "query_execution",
+            "asset_id": execution["id"],
+            "action": "query.result_produced",
+        },
+    )
+    assert query_result_usage_response.status_code == 200
+    assert query_result_usage_response.json()[0]["details"]["dataset_id"] == dataset_id
+
+    dashboard_response = client.post(
+        "/api/v1/visualizations/dashboards",
+        json={"workspace_id": workspace_id, "name": "Saved Query Dashboard", "description": "Downstream lineage"},
+    )
+    assert dashboard_response.status_code == 201
+    dashboard_id = dashboard_response.json()["id"]
+
+    dependency_response = client.post(
+        f"/api/v1/visualizations/dashboards/{dashboard_id}/dependencies",
+        json={
+            "dataset_id": dataset_id,
+            "query_execution_id": execution["id"],
+            "dependency_type": "query_result",
+            "details": {"panel": "sales-table"},
+        },
+    )
+    assert dependency_response.status_code == 201
+
     lineage_response = client.get(
         "/api/v1/metadata/lineage",
         params={"workspace_id": workspace_id, "asset_type": "dataset", "asset_id": dataset_id},
@@ -292,6 +334,31 @@ def test_query_execution_history_records_lineage_and_saved_queries(client, compl
     assert query_lineage[0]["upstream_type"] == "dataset"
     assert query_lineage[0]["upstream_id"] == dataset_id
     assert query_lineage[0]["relation_type"] == "queried_by"
+
+    all_lineage_response = client.get("/api/v1/metadata/lineage", params={"workspace_id": workspace_id})
+    assert all_lineage_response.status_code == 200
+    lineage_records = all_lineage_response.json()
+
+    def has_edge(
+        upstream_type: str,
+        upstream_id: int,
+        downstream_type: str,
+        downstream_id: int,
+        relation_type: str,
+    ) -> bool:
+        return any(
+            record["upstream_type"] == upstream_type
+            and record["upstream_id"] == upstream_id
+            and record["downstream_type"] == downstream_type
+            and record["downstream_id"] == downstream_id
+            and record["relation_type"] == relation_type
+            for record in lineage_records
+        )
+
+    assert has_edge("dataset", dataset_id, "saved_query", saved_query["id"], "saved_query_from_dataset")
+    assert has_edge("query_execution", execution["id"], "query_result", execution["id"], "produced_result")
+    assert has_edge("query_execution", execution["id"], "dashboard", dashboard_id, "feeds_dashboard")
+    assert has_edge("saved_query", saved_query["id"], "dashboard", dashboard_id, "saved_query_feeds_dashboard")
 
 
 def test_ai_context_builder_uses_lifecycle_metadata(client, complete_upload) -> None:

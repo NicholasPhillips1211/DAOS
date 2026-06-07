@@ -340,6 +340,25 @@ class MetadataService:
             relation_type="queried_by",
             details=details,
         )
+        self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type="query_execution",
+            upstream_id=query_execution_id,
+            downstream_type="query_result",
+            downstream_id=query_execution_id,
+            relation_type="produced_result",
+            details=details,
+        )
+        self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type="query_execution",
+            asset_id=query_execution_id,
+            action="query.result_produced",
+            actor=actor,
+            details={"dataset_id": dataset_id, **details},
+        )
         event = AuditEvent(
             workspace_id=workspace_id,
             event_type="metadata.analysis.query_executed",
@@ -347,6 +366,54 @@ class MetadataService:
             resource_type="query_execution",
             resource_id=query_execution_id,
             details=json.dumps({"dataset_id": dataset_id, **details}, sort_keys=True),
+        )
+        db.add(event)
+        db.commit()
+
+    def record_saved_query_metadata(
+        self,
+        db: Session,
+        *,
+        workspace_id: int,
+        dataset_id: int,
+        saved_query_id: int,
+        name: str,
+        sql_text: str,
+        actor: str | None,
+    ) -> None:
+        """Record lineage and usage for a saved SQL asset."""
+
+        details = {
+            "dataset_id": dataset_id,
+            "name": name,
+            "sql_text": sql_text,
+        }
+        self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type="dataset",
+            upstream_id=dataset_id,
+            downstream_type="saved_query",
+            downstream_id=saved_query_id,
+            relation_type="saved_query_from_dataset",
+            details=details,
+        )
+        self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type="saved_query",
+            asset_id=saved_query_id,
+            action="saved_query.created",
+            actor=actor,
+            details=details,
+        )
+        event = AuditEvent(
+            workspace_id=workspace_id,
+            event_type="metadata.analysis.saved_query_created",
+            actor=actor,
+            resource_type="saved_query",
+            resource_id=saved_query_id,
+            details=json.dumps(details, sort_keys=True),
         )
         db.add(event)
         db.commit()

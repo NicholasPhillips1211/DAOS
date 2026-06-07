@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.analysis import QueryExecution
+from app.models.analysis import QueryExecution, SavedQuery
 from app.models.metadata import Dataset
 from app.models.visualization import Dashboard, DashboardDependency, DashboardKpiOwner
 from app.schemas.visualization import ChartRecommendationRead, DashboardImpactItem, DashboardImpactRead, DashboardKpiOwnerRead
@@ -128,6 +128,30 @@ class VisualizationWorkflowService:
                 relation_type="feeds_dashboard",
                 details=lineage_details,
             )
+            matching_saved_queries = (
+                db.query(SavedQuery)
+                .filter(
+                    SavedQuery.workspace_id == dashboard.workspace_id,
+                    SavedQuery.dataset_id == dataset.id,
+                    SavedQuery.sql_text == query_execution.sql_text,
+                )
+                .all()
+            )
+            for saved_query in matching_saved_queries:
+                self.metadata_service.record_lineage_record(
+                    db,
+                    workspace_id=dashboard.workspace_id,
+                    upstream_type="saved_query",
+                    upstream_id=saved_query.id,
+                    downstream_type="dashboard",
+                    downstream_id=dashboard.id,
+                    relation_type="saved_query_feeds_dashboard",
+                    details={
+                        **lineage_details,
+                        "saved_query_id": saved_query.id,
+                        "saved_query_name": saved_query.name,
+                    },
+                )
         self.metadata_service.record_usage_event(
             db,
             workspace_id=dashboard.workspace_id,
