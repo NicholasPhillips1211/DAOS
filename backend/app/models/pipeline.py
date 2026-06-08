@@ -6,17 +6,18 @@ from enum import Enum
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.workflow_status import WorkflowStatus
 from app.core.database import Base
 
 
 class PipelineStatus(str, Enum):
     """Lifecycle states used to track pipeline execution and scheduling."""
 
-    draft = "draft"
-    scheduled = "scheduled"
-    running = "running"
-    succeeded = "succeeded"
-    failed = "failed"
+    draft = WorkflowStatus.draft.value
+    scheduled = WorkflowStatus.scheduled.value
+    running = WorkflowStatus.running.value
+    succeeded = WorkflowStatus.succeeded.value
+    failed = WorkflowStatus.failed.value
 
 
 class Pipeline(Base):

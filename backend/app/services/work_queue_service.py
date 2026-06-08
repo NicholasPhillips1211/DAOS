@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.workflow_status import WorkflowStatus
 from app.models.work_item import WorkItem
 
 
@@ -28,7 +29,7 @@ class WorkQueueService:
         item = WorkItem(
             workspace_id=workspace_id,
             job_type=job_type,
-            status="queued",
+            status=WorkflowStatus.queued.value,
             priority=priority,
             payload_json=json.dumps(payload, sort_keys=True),
             max_attempts=max(1, max_attempts),
@@ -107,7 +108,7 @@ class WorkQueueService:
             now=now,
         )
         query = db.query(WorkItem).filter(
-            WorkItem.status == "queued",
+            WorkItem.status == WorkflowStatus.queued.value,
             WorkItem.available_at <= now,
         )
         if job_types:
@@ -119,7 +120,7 @@ class WorkQueueService:
         if item is None:
             return None
 
-        item.status = "running"
+        item.status = WorkflowStatus.running.value
         item.attempts += 1
         item.locked_by = worker_id
         item.locked_at = now
@@ -145,7 +146,7 @@ class WorkQueueService:
         stale_after = settings.worker_stale_after_seconds if stale_after_seconds is None else stale_after_seconds
         stale_before = current_time - timedelta(seconds=max(stale_after, 0))
         query = db.query(WorkItem).filter(
-            WorkItem.status == "running",
+            WorkItem.status == WorkflowStatus.running.value,
             WorkItem.locked_at.isnot(None),
             WorkItem.locked_at <= stale_before,
         )
@@ -158,11 +159,11 @@ class WorkQueueService:
             item.locked_at = None
             item.updated_at = current_time
             if item.attempts >= item.max_attempts:
-                item.status = "failed"
+                item.status = WorkflowStatus.failed.value
                 item.finished_at = current_time
                 item.error_message = "Worker lock expired after max attempts"
             else:
-                item.status = "queued"
+                item.status = WorkflowStatus.queued.value
                 item.available_at = current_time
                 item.error_message = "Requeued after stale worker lock"
             db.add(item)
@@ -180,7 +181,7 @@ class WorkQueueService:
             db,
             item,
             values={
-                "status": "succeeded",
+                "status": WorkflowStatus.succeeded.value,
                 "result_json": json.dumps(result or {}, sort_keys=True),
                 "error_message": None,
                 "locked_by": None,
@@ -196,7 +197,7 @@ class WorkQueueService:
         now = datetime.now(timezone.utc)
         if item.attempts < item.max_attempts:
             values = {
-                "status": "queued",
+                "status": WorkflowStatus.queued.value,
                 "error_message": error_message,
                 "locked_by": None,
                 "locked_at": None,
@@ -205,7 +206,7 @@ class WorkQueueService:
             }
         else:
             values = {
-                "status": "failed",
+                "status": WorkflowStatus.failed.value,
                 "error_message": error_message,
                 "locked_by": None,
                 "locked_at": None,
@@ -244,7 +245,7 @@ class WorkQueueService:
     @staticmethod
     def _finish_locked_item(db: Session, item: WorkItem, *, values: dict[str, Any]) -> WorkItem:
         locked_by = item.locked_by
-        filters = [WorkItem.id == item.id, WorkItem.status == "running"]
+        filters = [WorkItem.id == item.id, WorkItem.status == WorkflowStatus.running.value]
         if locked_by is not None:
             filters.append(WorkItem.locked_by == locked_by)
 

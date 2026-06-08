@@ -138,6 +138,73 @@ export type IngestionJobRead = {
   finished_at?: string | null;
 };
 
+export type DataQualityColumnSummary = {
+  name: string;
+  missing: number;
+  sample_size: number;
+  inferred_type: string;
+};
+
+export type DataCleaningSummary = {
+  raw_row_count: number;
+  cleaned_row_count: number;
+  blank_rows_removed: number;
+  duplicate_rows_removed: number;
+  cells_trimmed: number;
+  rejected_row_count: number;
+  extra_columns_preserved?: number;
+  short_rows_padded?: number;
+  engine?: string;
+  policy?: {
+    id: string;
+    version: string;
+    engine: string;
+    rules: string[];
+  };
+  policy_fingerprint?: string;
+  artifact_fingerprints?: {
+    raw?: string;
+    cleaned?: string;
+    rejected?: string;
+    policy?: string;
+  };
+  headers_normalized: Array<{ from: string; to: string }>;
+  rules: string[];
+  cleaned_path: string;
+  rejected_path?: string;
+};
+
+export type DataQualityDelta = {
+  raw_quality_score: number;
+  cleaned_quality_score: number;
+  score_delta: number;
+  raw_row_count: number;
+  cleaned_row_count: number;
+  rejected_row_count: number;
+  blank_rows_removed: number;
+  duplicate_rows_removed: number;
+};
+
+export type DataQualityReportRead = {
+  id: number;
+  dataset_id: number;
+  row_count: number;
+  rejected_rows: number;
+  quality_score: number;
+  columns: DataQualityColumnSummary[];
+  issues: string[];
+  metadata?: {
+    profile_version?: string;
+    raw_storage_path?: string;
+    cleaned_storage_path?: string;
+    rejected_storage_path?: string;
+    cleaning?: DataCleaningSummary;
+    quality_delta?: DataQualityDelta;
+    [key: string]: unknown;
+  } | null;
+  created_at: string;
+};
+
 export type QueryResult = {
   columns: string[];
   rows: Array<Record<string, unknown>>;

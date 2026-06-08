@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.workflow_jobs import INGESTION_CLEAN_PROFILE_JOB_TYPES, expand_work_job_types
 from app.models.automation import AutomationPlan
 from app.models.metadata import Dataset
 from app.models.visualization import Dashboard
@@ -49,7 +50,11 @@ class WorkerRunner:
         """Claim and execute at most one work item."""
 
         with SessionLocal() as db:
-            item = self.work_queue_service.claim_next(db, worker_id=self.worker_id, job_types=job_types)
+            item = self.work_queue_service.claim_next(
+                db,
+                worker_id=self.worker_id,
+                job_types=expand_work_job_types(job_types),
+            )
             if item is None:
                 return None
 
@@ -74,8 +79,8 @@ class WorkerRunner:
 
     def _dispatch(self, db: Session, item: WorkItem) -> dict[str, object]:
         payload = self.work_queue_service.payload(item)
-        if item.job_type == "ingestion.profile":
-            return self._run_ingestion_profile(db, payload)
+        if item.job_type in INGESTION_CLEAN_PROFILE_JOB_TYPES:
+            return self._run_ingestion_clean_profile(db, payload)
         if item.job_type == "lakehouse.query":
             return self._run_lakehouse_query(db, payload)
         if item.job_type == "ml.train":
@@ -88,15 +93,23 @@ class WorkerRunner:
             return self._run_dashboard_refresh(db, payload)
         raise ValueError(f"Unsupported work item type: {item.job_type}")
 
-    def _run_ingestion_profile(self, db: Session, payload: dict[str, object]) -> dict[str, object]:
+    def _run_ingestion_clean_profile(self, db: Session, payload: dict[str, object]) -> dict[str, object]:
         job_id = int(payload["ingestion_job_id"])
-        result = self.ingestion_service.process_queued_job(db, job_id=job_id)
+        result = self.ingestion_service.process_queued_job(
+            db,
+            job_id=job_id,
+            clean_storage_root=Path(settings.clean_storage_root),
+            rejected_storage_root=Path(settings.rejected_storage_root),
+        )
         return {
             "ingestion_job_id": result.job.id,
             "dataset_id": result.dataset.id,
             "report_id": result.report.id,
             "row_count": result.job.row_count,
             "quality_score": result.job.quality_score,
+            "storage_path": str(result.storage_path),
+            "raw_storage_path": str(result.raw_storage_path),
+            "rejected_storage_path": str(result.rejected_storage_path),
         }
 
     def _run_lakehouse_query(self, db: Session, payload: dict[str, object]) -> dict[str, object]:

@@ -126,6 +126,12 @@ class MetadataService:
         metadata = profile.get("metadata", {})
         schema = metadata.get("schema") or self._schema_from_profile(profile)
         profile_fingerprint = metadata.get("profile_fingerprint")
+        cleaning = metadata.get("cleaning") or profile.get("cleaning", {})
+        quality_delta = metadata.get("quality_delta") or profile.get("quality_delta", {})
+        raw_storage_path = metadata.get("raw_storage_path")
+        cleaned_storage_path = metadata.get("cleaned_storage_path") or storage_path
+        rejected_storage_path = metadata.get("rejected_storage_path")
+        artifact_fingerprints = cleaning.get("artifact_fingerprints", {}) if isinstance(cleaning, dict) else {}
         stewardship_status = "active" if actor else "unassigned"
         event_details = {
             "job_id": job_id,
@@ -138,6 +144,13 @@ class MetadataService:
             "steward_email": actor,
             "stewardship_status": stewardship_status,
             "status": "completed",
+            "storage_path": cleaned_storage_path,
+            "raw_storage_path": raw_storage_path,
+            "cleaned_storage_path": cleaned_storage_path,
+            "rejected_storage_path": rejected_storage_path,
+            "cleaning": cleaning,
+            "quality_delta": quality_delta,
+            "artifact_fingerprints": artifact_fingerprints,
         }
 
         self.repository.add_schema_record(
@@ -160,7 +173,31 @@ class MetadataService:
             details={
                 "dataset_name": dataset_name,
                 "source_name": source_name,
-                "storage_path": storage_path,
+                "storage_path": cleaned_storage_path,
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "profile_fingerprint": profile_fingerprint,
+                "artifact_fingerprints": artifact_fingerprints,
+            },
+        )
+        self.repository.add_lineage_record(
+            db,
+            workspace_id=workspace_id,
+            upstream_type="raw_file",
+            upstream_id=job_id,
+            downstream_type="dataset",
+            downstream_id=dataset_id,
+            relation_type="cleaned_into_dataset",
+            details={
+                "dataset_name": dataset_name,
+                "source_name": source_name,
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "cleaning": cleaning,
+                "quality_delta": quality_delta,
+                "artifact_fingerprints": artifact_fingerprints,
                 "profile_fingerprint": profile_fingerprint,
             },
         )
@@ -176,6 +213,30 @@ class MetadataService:
                 "source_name": source_name,
                 "row_count": profile.get("row_count", 0),
                 "quality_score": profile.get("quality_score", 0),
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "quality_delta": quality_delta,
+            },
+        )
+        self.repository.add_usage_event(
+            db,
+            workspace_id=workspace_id,
+            asset_type="dataset",
+            asset_id=dataset_id,
+            action="information_cleaned",
+            actor=actor,
+            details={
+                "job_id": job_id,
+                "source_name": source_name,
+                "row_count": profile.get("row_count", 0),
+                "quality_score": profile.get("quality_score", 0),
+                "cleaning": cleaning,
+                "quality_delta": quality_delta,
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "artifact_fingerprints": artifact_fingerprints,
             },
         )
         self.repository.add_ownership_record(
@@ -190,6 +251,10 @@ class MetadataService:
                 "job_id": job_id,
                 "dataset_name": dataset_name,
                 "source_name": source_name,
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "artifact_fingerprints": artifact_fingerprints,
                 "profile_fingerprint": profile_fingerprint,
             },
         )
@@ -210,10 +275,19 @@ class MetadataService:
                 "owner_email": actor,
                 "steward_email": actor,
                 "stewardship_status": stewardship_status,
+                "cleaning": cleaning,
+                "quality_delta": quality_delta,
+                "raw_storage_path": raw_storage_path,
+                "cleaned_storage_path": cleaned_storage_path,
+                "rejected_storage_path": rejected_storage_path,
+                "artifact_fingerprints": artifact_fingerprints,
                 "profile_fingerprint": profile_fingerprint,
             },
         )
 
+        # Keep the historical event type stable for existing audit consumers;
+        # the details payload now carries cleaning, quality-delta, and artifact
+        # lineage evidence for the broader ingestion lifecycle.
         event = AuditEvent(
             workspace_id=workspace_id,
             event_type="metadata.ingestion.profile_created",

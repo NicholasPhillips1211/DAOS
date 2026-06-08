@@ -19,8 +19,8 @@ export function SourceSetupPanel({ wizard }: SourceSetupPanelProps) {
     },
     {
       step: '3',
-      title: 'Upload and profile',
-      body: 'The backend stores the file, profiles it, and returns quality metrics.',
+      title: 'Clean and profile',
+      body: 'The backend preserves the raw file, writes a cleaned artifact, and returns quality metrics.',
     },
   ];
 

@@ -20,7 +20,10 @@ services:
       context: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://daos:daos@postgres:5432/daos
+      AUTH_ENABLED: "false"
       RAW_STORAGE_ROOT: /app/data/raw
+      CLEAN_STORAGE_ROOT: /app/data/cleaned
+      REJECTED_STORAGE_ROOT: /app/data/rejected
       MODEL_ARTIFACT_ROOT: /app/data/models
     depends_on:
       postgres:
@@ -39,6 +42,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://daos:daos@postgres:5432/daos
       RAW_STORAGE_ROOT: /app/data/raw
+      CLEAN_STORAGE_ROOT: /app/data/cleaned
+      REJECTED_STORAGE_ROOT: /app/data/rejected
       MODEL_ARTIFACT_ROOT: /app/data/models
       WORKER_ID: compose-worker
       WORKER_STALE_AFTER_SECONDS: 300

@@ -48,6 +48,10 @@ These modules support observability, security, or platform-level concerns used b
 - Raise `HTTPException` in workflow services only when needed to preserve existing API contracts.
 - Keep transactions explicit (`add`, `commit`, `refresh`) inside service methods that own persistence.
 - Add concise docstrings to explain non-obvious implementation decisions.
+- Persist a terminal state for every attempted workflow execution, including malformed input and no-op outcomes.
+- Keep plan-level statuses honest: reserve `completed` for workflows that actually executed useful work, and use clearer outcomes such as `failed`, `partial`, `skipped`, or `deferred` when appropriate.
+- Prefer idempotent worker steps. Retried jobs should reuse already-created artifacts instead of duplicating datasets, dashboards, or metadata records.
+- Emit audit, metadata, or work-item evidence for state changes that operators may need to investigate later.
 
 ## Suggested extension pattern
 
@@ -56,4 +60,5 @@ When adding a new endpoint with non-trivial business flow:
 1. Add or extend a workflow service method in this package.
 2. Keep RBAC checks in the route.
 3. Delegate orchestration and persistence to the service.
-4. Add or update tests for both happy path and validation errors.
+4. Define the status transitions before writing the handler.
+5. Add or update tests for happy path, validation errors, retry/no-op behavior, and persisted failure state.

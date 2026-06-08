@@ -56,10 +56,11 @@ From the backend directory:
 ```bash
 cd backend
 python scripts/run_migrations.py
-python -m uvicorn app.main:app --reload
+AUTH_ENABLED=false python -m uvicorn app.main:app --reload
 ```
 
 The backend listens on port `8000`. A lightweight root check is available at `/`, and a health endpoint is available at `/api/v1/health`.
+Auth is enabled by default in code. For local development, either run with `AUTH_ENABLED=false` as shown above, or set `API_KEYS_CSV` and configure the frontend with a matching `VITE_API_KEY`.
 
 Run the backend test suite with:
 
@@ -137,6 +138,8 @@ Important settings include:
 - `LLM_API_KEY` for model authorization.
 - `LLM_TIMEOUT_SECONDS` for LLM call timeouts.
 - `RAW_STORAGE_ROOT` for persisted raw upload files shared by API and worker.
+- `CLEAN_STORAGE_ROOT` for cleaned CSV artifacts used by query, dashboard, ML, and analysis workflows.
+- `REJECTED_STORAGE_ROOT` for rejected-row quarantine artifacts produced during ingestion cleaning.
 - `MODEL_ARTIFACT_ROOT` for generated ML artifacts shared by API and worker.
 - `WORKER_ID`, `WORKER_POLL_SECONDS`, and `WORKER_STALE_AFTER_SECONDS` for worker identity, polling cadence, and stale-lock recovery.
 
@@ -150,6 +153,8 @@ LLM_API_KEY=
 
 If the model server is unavailable, automation falls back to a deterministic plan derived from workspace signals, so the feature still produces useful output offline.
 
+The example environment file is kept at the repository root. Backend settings load both the root `.env` and a backend-local `.env`, so copying `.env.example` to `.env` works with the documented `cd backend` workflow.
+
 ## Feature Guide
 
 ### Health And Runtime Checks
@@ -158,6 +163,7 @@ Use the root route and health route to confirm the service is up:
 
 - `GET /` returns the application name and environment.
 - `GET /api/v1/health` returns a simple `ok` payload for probes and smoke tests.
+- `GET /api/v1/observability/workflows?workspace_id={workspace_id}` returns workflow status rollups for work items, ingestion jobs, automation, and pipeline operations.
 
 ### Workspaces And Datasets
 
@@ -167,7 +173,7 @@ The workspace API also exposes a summary endpoint at `/api/v1/workspaces/{worksp
 
 ### Ingestion And Lakehouse
 
-These routes are intended for moving raw data into the platform and making it queryable in analytical form. Uploads now return an accepted ingestion job, then a worker profiles the file, creates the dataset, writes the quality report, and emits metadata. Use `GET /api/v1/ingestion/jobs/{job_id}` and `/api/v1/work-items/{work_item_id}` to follow progress.
+These routes are intended for moving raw data into the platform, cleaning it, and making the cleaned artifact queryable in analytical form. Uploads now return an accepted ingestion job, then a worker preserves the raw file, uses DuckDB to write cleaned and rejected-row CSV artifacts, profiles raw versus cleaned quality, creates the dataset, writes the quality report, and emits metadata. The ingestion UI surfaces cleaning counts, rejected-row counts, quality delta, and the cleaned schema for suggested SQL. Use `GET /api/v1/ingestion/jobs/{job_id}` and `/api/v1/work-items/{work_item_id}` to follow progress.
 
 ### Pipelines And Automation
 

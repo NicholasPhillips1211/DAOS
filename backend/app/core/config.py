@@ -22,12 +22,14 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_timeout_seconds: float = 30.0
     raw_storage_root: str = "data/raw"
+    clean_storage_root: str = "data/cleaned"
+    rejected_storage_root: str = "data/rejected"
     model_artifact_root: str = "data/models"
     worker_id: str = "daos-worker"
     worker_poll_seconds: float = 2.0
     worker_stale_after_seconds: float = 300.0
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=("../.env", ".env"), env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

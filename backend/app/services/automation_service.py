@@ -12,6 +12,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.workflow_status import WorkflowStatus, summarize_action_statuses
 from app.models.analysis import Insight
 from app.models.automation import AutomationPlan
 from app.models.business import BusinessTranslation
@@ -60,7 +61,7 @@ class AutomationService:
             objective=objective,
             provider=provider,
             model_name=model_name,
-            status="generated",
+            status=WorkflowStatus.generated.value,
             summary=plan_payload["summary"],
             automation_json=json.dumps(plan_payload, ensure_ascii=False),
         )
@@ -298,23 +299,67 @@ class AutomationExecutor:
         try:
             payload = json.loads(plan.automation_json)
         except json.JSONDecodeError:
-            return {"status": "failed", "reason": "Invalid automation_json payload", "actions_executed": []}
+            return self._persist_execution_result(
+                db,
+                plan,
+                {
+                    "status": WorkflowStatus.failed.value,
+                    "reason": "Invalid automation_json payload",
+                    "actions_executed": [],
+                },
+            )
 
         if not isinstance(payload.get("actions"), list):
-            return {"status": "failed", "reason": "No actions found in plan", "actions_executed": []}
+            return self._persist_execution_result(
+                db,
+                plan,
+                {
+                    "status": WorkflowStatus.failed.value,
+                    "reason": "No actions found in plan",
+                    "actions_executed": [],
+                },
+            )
 
         results: list[dict[str, Any]] = []
         for action in payload["actions"]:
-            action_name = action.get("name", "Unknown")
             try:
+                if not isinstance(action, dict):
+                    results.append(
+                        {
+                            "action": str(action),
+                            "status": WorkflowStatus.failed.value,
+                            "reason": "Malformed action item",
+                        }
+                    )
+                    continue
+
+                action_name = str(action.get("name") or "Unknown")
                 result = self._execute_action(db, plan.workspace_id, action_name)
                 results.append(result)
             except Exception as exc:
-                results.append({"action": action_name, "status": "failed", "error": str(exc)})
+                results.append({"action": action_name, "status": WorkflowStatus.failed.value, "error": str(exc)})
 
-        plan.execution_status = "completed"
+        execution_status = summarize_action_statuses(results)
+        return self._persist_execution_result(
+            db,
+            plan,
+            {
+                "status": execution_status,
+                "actions_executed": results,
+            },
+        )
+
+    def _persist_execution_result(
+        self,
+        db: Session,
+        plan: AutomationPlan,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist the terminal execution outcome for every execution attempt."""
+
+        plan.execution_status = str(result["status"])
         plan.executed_at = datetime.now(timezone.utc)
-        plan.execution_results_json = json.dumps({"status": "completed", "actions_executed": results}, ensure_ascii=False)
+        plan.execution_results_json = json.dumps(result, ensure_ascii=False)
         db.add(plan)
         db.commit()
         db.refresh(plan)
@@ -340,17 +385,17 @@ class AutomationExecutor:
         elif "pipeline" in action_name_lower:
             return self._define_pipeline_cadence(db, workspace_id)
         else:
-            return {"action": action_name, "status": "skipped", "reason": "No executor mapped for this action"}
+            return {"action": action_name, "status": WorkflowStatus.skipped.value, "reason": "No executor mapped for this action"}
 
     def _onboard_first_dataset(self, db: Session, workspace_id: int) -> dict[str, Any]:
         """Create a sample dataset if the workspace has none."""
         existing = db.query(Dataset).filter(Dataset.workspace_id == workspace_id).first()
         if existing:
-            return {"action": "Onboard first dataset", "status": "skipped", "reason": "Workspace already has datasets"}
+            return {"action": "Onboard first dataset", "status": WorkflowStatus.skipped.value, "reason": "Workspace already has datasets"}
 
         workspace = db.get(Workspace, workspace_id)
         if workspace is None:
-            return {"action": "Onboard first dataset", "status": "failed", "reason": "Workspace not found"}
+            return {"action": "Onboard first dataset", "status": WorkflowStatus.failed.value, "reason": "Workspace not found"}
 
         sample_path = f"/data/raw/ws{workspace_id}_sample.csv"
         dataset = Dataset(
@@ -372,7 +417,7 @@ class AutomationExecutor:
             .first()
         )
         if not newest:
-            return {"action": "Profile newest dataset", "status": "skipped", "reason": "No datasets in workspace"}
+            return {"action": "Profile newest dataset", "status": WorkflowStatus.skipped.value, "reason": "No datasets in workspace"}
 
         return {"action": "Profile newest dataset", "status": "executed", "dataset_id": newest.id}
 
@@ -380,7 +425,7 @@ class AutomationExecutor:
         """Create a default dashboard if the workspace has none."""
         existing = db.query(Dashboard).filter(Dashboard.workspace_id == workspace_id).first()
         if existing:
-            return {"action": "Create a working dashboard", "status": "skipped", "reason": "Workspace already has dashboards"}
+            return {"action": "Create a working dashboard", "status": WorkflowStatus.skipped.value, "reason": "Workspace already has dashboards"}
 
         dashboard = Dashboard(
             workspace_id=workspace_id,
@@ -395,7 +440,19 @@ class AutomationExecutor:
         """Create default sharing setup."""
         dashboard = db.query(Dashboard).filter(Dashboard.workspace_id == workspace_id).first()
         if not dashboard:
-            return {"action": "Activate collaboration", "status": "skipped", "reason": "No dashboard to share"}
+            return {"action": "Activate collaboration", "status": WorkflowStatus.skipped.value, "reason": "No dashboard to share"}
+        existing_share = (
+            db.query(Share)
+            .filter(
+                Share.workspace_id == workspace_id,
+                Share.resource_type == "dashboard",
+                Share.resource_id == dashboard.id,
+                Share.target_email == "team@example.local",
+            )
+            .first()
+        )
+        if existing_share:
+            return {"action": "Activate collaboration", "status": WorkflowStatus.skipped.value, "reason": "Collaboration share already exists"}
 
         share = Share(
             workspace_id=workspace_id,
@@ -412,15 +469,15 @@ class AutomationExecutor:
         """Create a placeholder model training action."""
         existing = db.query(TrainedModel).filter(TrainedModel.workspace_id == workspace_id).first()
         if existing:
-            return {"action": "Train a starter model", "status": "skipped", "reason": "Workspace already has models"}
+            return {"action": "Train a starter model", "status": WorkflowStatus.skipped.value, "reason": "Workspace already has models"}
 
-        return {"action": "Train a starter model", "status": "deferred", "reason": "Model training requires manual dataset selection"}
+        return {"action": "Train a starter model", "status": WorkflowStatus.deferred.value, "reason": "Model training requires manual dataset selection"}
 
     def _translate_insights(self, db: Session, workspace_id: int) -> dict[str, Any]:
         """Create a default business translation if insights exist."""
         insights = db.query(Insight).filter(Insight.workspace_id == workspace_id).all()
         if not insights:
-            return {"action": "Translate insights for stakeholders", "status": "skipped", "reason": "No insights to translate"}
+            return {"action": "Translate insights for stakeholders", "status": WorkflowStatus.skipped.value, "reason": "No insights to translate"}
 
         executed_count = 0
         for insight in insights[:3]:
@@ -442,7 +499,7 @@ class AutomationExecutor:
         """Create a placeholder pipeline."""
         existing = db.query(Pipeline).filter(Pipeline.workspace_id == workspace_id).first()
         if existing:
-            return {"action": "Define a pipeline cadence", "status": "skipped", "reason": "Workspace already has pipelines"}
+            return {"action": "Define a pipeline cadence", "status": WorkflowStatus.skipped.value, "reason": "Workspace already has pipelines"}
 
         pipeline = Pipeline(
             workspace_id=workspace_id,

@@ -10,7 +10,10 @@ export function UploadResultPanel({ wizard }: UploadResultPanelProps) {
   const uploadStatus = wizard.uploadResult?.status;
   const uploadComplete = uploadStatus === 'completed';
   const uploadFailed = uploadStatus === 'failed';
-  const statusLabel = uploadComplete ? 'Ready for analysis' : uploadFailed ? 'Needs attention' : 'Profiling queued';
+  const cleaning = wizard.qualityReport?.metadata?.cleaning;
+  const qualityDelta = wizard.qualityReport?.metadata?.quality_delta;
+  const normalizedHeaderCount = cleaning?.headers_normalized.length ?? 0;
+  const statusLabel = uploadComplete ? 'Ready for analysis' : uploadFailed ? 'Needs attention' : 'Cleaning queued';
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -25,7 +28,7 @@ export function UploadResultPanel({ wizard }: UploadResultPanelProps) {
           <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3">
             <p className="font-medium text-emerald-100">
               {uploadComplete
-                ? `${wizard.uploadResult.dataset_name} profile complete`
+                ? `${wizard.uploadResult.dataset_name} cleaned and profiled`
                 : `${wizard.uploadResult.dataset_name} accepted for processing`}
             </p>
             <p className="mt-1 text-emerald-50/80">
@@ -43,12 +46,25 @@ export function UploadResultPanel({ wizard }: UploadResultPanelProps) {
               />
             </div>
           </div>
+          {uploadComplete && cleaning ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <CleaningMetric label="Cleaned rows" value={cleaning.cleaned_row_count} />
+              <CleaningMetric label="Rejected rows" value={cleaning.rejected_row_count} />
+              <CleaningMetric label="Quality delta" value={qualityDelta ? `${formatSigned(qualityDelta.score_delta)} pts` : '0 pts'} />
+              <CleaningMetric label="Headers normalized" value={normalizedHeaderCount} />
+            </div>
+          ) : null}
+          {uploadComplete && cleaning ? (
+            <p className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+              Engine: {cleaning.engine ?? 'duckdb'} - rejected rows quarantined
+            </p>
+          ) : null}
           <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-slate-300">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Next move</p>
             <p className="mt-2 leading-6">
               {uploadComplete
-                ? 'Use the query template above, then create a dashboard from the profiled dataset.'
-                : 'Keep this panel open while the worker profiles the file and prepares the dataset for analysis.'}
+                ? 'Use the query template above, then create a dashboard from the cleaned dataset.'
+                : 'Keep this panel open while the worker cleans, profiles, and prepares the dataset for analysis.'}
             </p>
           </div>
         </div>
@@ -68,4 +84,17 @@ export function UploadResultPanel({ wizard }: UploadResultPanelProps) {
       )}
     </div>
   );
+}
+
+function CleaningMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function formatSigned(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
 }

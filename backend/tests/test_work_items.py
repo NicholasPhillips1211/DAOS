@@ -2,9 +2,12 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from app.core.database import SessionLocal
+from app.core.workflow_jobs import INGESTION_CLEAN_PROFILE_JOB, LEGACY_INGESTION_PROFILE_JOB
 from app.models.metadata import Dataset
+from app.models.work_item import WorkItem
 from app.services.ingestion_workflow_service import IngestionWorkflowService
 from app.services.work_queue_service import WorkQueueService
+from app.workers.runner import WorkerRunner
 
 
 def test_ingestion_upload_creates_visible_work_item(client, run_worker) -> None:
@@ -25,7 +28,7 @@ def test_ingestion_upload_creates_visible_work_item(client, run_worker) -> None:
     work_item_response = client.get(f"/api/v1/work-items/{accepted['work_item_id']}")
     assert work_item_response.status_code == 200
     work_item = work_item_response.json()
-    assert work_item["job_type"] == "ingestion.profile"
+    assert work_item["job_type"] == INGESTION_CLEAN_PROFILE_JOB
     assert work_item["status"] == "queued"
     assert work_item["payload"]["ingestion_job_id"] == accepted["job_id"]
 
@@ -37,6 +40,48 @@ def test_ingestion_upload_creates_visible_work_item(client, run_worker) -> None:
     assert completed_item["status"] == "succeeded"
     assert completed_item["result"]["dataset_id"] > 0
     assert completed_item["result"]["quality_score"] == 100
+
+
+def test_legacy_ingestion_profile_work_item_still_runs_with_clean_profile_filter(client) -> None:
+    workspace_response = client.post(
+        "/api/v1/workspaces",
+        json={"name": "legacy-work-queue-ws", "description": "queue tests"},
+    )
+    assert workspace_response.status_code == 201
+    workspace_id = workspace_response.json()["id"]
+
+    upload_response = client.post(
+        "/api/v1/ingestion/upload",
+        data={"workspace_id": workspace_id, "dataset_name": "legacy-sales"},
+        files={"file": ("legacy-sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
+    )
+    assert upload_response.status_code == 202
+    accepted = upload_response.json()
+
+    with SessionLocal() as db:
+        work_item = db.get(WorkItem, accepted["work_item_id"])
+        assert work_item is not None
+        work_item.job_type = LEGACY_INGESTION_PROFILE_JOB
+        db.add(work_item)
+        db.commit()
+
+    item = WorkerRunner(worker_id="legacy-filter-worker").run_once(job_types={INGESTION_CLEAN_PROFILE_JOB})
+    assert item is not None
+    assert item.status == "succeeded"
+    assert item.job_type == LEGACY_INGESTION_PROFILE_JOB
+
+    job_response = client.get(f"/api/v1/ingestion/jobs/{accepted['job_id']}")
+    assert job_response.status_code == 200
+    job = job_response.json()
+    assert job["status"] == "completed"
+    assert job["dataset_id"] is not None
+
+
+def test_work_item_list_rejects_unknown_status_filter(client) -> None:
+    response = client.get("/api/v1/work-items?workspace_id=1&status=done")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Unknown workflow status"
 
 
 def test_completed_ingestion_job_reuses_existing_dataset(client, complete_upload) -> None:
@@ -57,6 +102,37 @@ def test_completed_ingestion_job_reuses_existing_dataset(client, complete_upload
         assert result.dataset.id == accepted["dataset_id"]
         assert result.job.status == "completed"
         assert db.query(Dataset).filter(Dataset.workspace_id == workspace_id).count() == dataset_count
+
+
+def test_ingestion_success_event_failure_does_not_corrupt_completed_job(client, run_worker, monkeypatch) -> None:
+    workspace_response = client.post("/api/v1/workspaces", json={"name": "event-safe-ws", "description": "event failure tests"})
+    assert workspace_response.status_code == 201
+    workspace_id = workspace_response.json()["id"]
+
+    upload_response = client.post(
+        "/api/v1/ingestion/upload",
+        data={"workspace_id": workspace_id, "dataset_name": "event-safe-sales"},
+        files={"file": ("event-safe-sales.csv", BytesIO(b"id,amount\n1,10\n2,20\n"), "text/csv")},
+    )
+    assert upload_response.status_code == 202
+    accepted = upload_response.json()
+
+    def fail_success_events(*args, **kwargs) -> None:
+        raise RuntimeError("metadata sink unavailable")
+
+    monkeypatch.setattr(IngestionWorkflowService, "emit_success_events", fail_success_events)
+
+    run_worker()
+
+    job_response = client.get(f"/api/v1/ingestion/jobs/{accepted['job_id']}")
+    assert job_response.status_code == 200
+    job = job_response.json()
+    assert job["status"] == "completed"
+    assert job["dataset_id"] is not None
+
+    work_item_response = client.get(f"/api/v1/work-items/{accepted['work_item_id']}")
+    assert work_item_response.status_code == 200
+    assert work_item_response.json()["status"] == "succeeded"
 
 
 def test_stale_work_item_is_reclaimed_by_next_worker(client) -> None:

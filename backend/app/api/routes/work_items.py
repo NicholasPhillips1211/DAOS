@@ -11,6 +11,7 @@ from app.core.auth import (
     require_workspace_scope,
 )
 from app.core.dependencies import get_db, get_pagination
+from app.core.workflow_status import is_known_workflow_status
 from app.models.work_item import WorkItem
 from app.schemas.work_item import WorkItemRead
 from app.services.work_queue_service import WorkQueueService
@@ -32,6 +33,8 @@ def list_work_items(
     """List background work items for operational visibility."""
 
     require_workspace_scope(workspace_id)
+    if status is not None and not is_known_workflow_status(status):
+        raise HTTPException(status_code=400, detail="Unknown workflow status")
     if workspace_id is not None:
         require_workspace_role(db, workspace_id, principal, WORKSPACE_READ_ROLES)
     total = work_queue_service.count_items(db, workspace_id=workspace_id, status=status, job_type=job_type)

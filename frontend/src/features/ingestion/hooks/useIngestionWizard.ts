@@ -1,6 +1,12 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaceSummary } from '../../workspace/api';
-import { getIngestionJob, listWorkspaceDatasets, runDatasetSql, uploadDatasetFile } from '../api';
+import {
+  getDatasetQualityReport,
+  getIngestionJob,
+  listWorkspaceDatasets,
+  runDatasetSql,
+  uploadDatasetFile,
+} from '../api';
 import { wizardStages } from '../constants';
 import type { IngestionWizardProps, IngestionWizardState, PreviewSummary, WizardStage } from '../types';
 import { buildSuggestedSql, parseCsvPreview } from '../utils';
@@ -28,6 +34,7 @@ export function useIngestionWizard({
   const [querySql, setQuerySql] = useState('');
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryResult, setQueryResult] = useState<IngestionWizardState['queryResult']>(null);
+  const [qualityReport, setQualityReport] = useState<IngestionWizardState['qualityReport']>(null);
   const [draftPreviewLoading, setDraftPreviewLoading] = useState(false);
   const [dashboardDraftPreview, setDashboardDraftPreview] = useState<DashboardDraftPreview | null>(null);
   const [approvalChecked, setApprovalChecked] = useState(false);
@@ -39,7 +46,11 @@ export function useIngestionWizard({
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const uploadPollToken = useRef(0);
 
-  const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, preview.headers), [datasetName, preview.headers]);
+  const queryColumns = useMemo(
+    () => qualityReport?.columns.map((column) => column.name) ?? preview.headers,
+    [preview.headers, qualityReport],
+  );
+  const queryTemplate = useMemo(() => buildSuggestedSql(datasetName, queryColumns), [datasetName, queryColumns]);
   const activeDatasetId = selectedDatasetId ? Number(selectedDatasetId) : null;
   const currentStage = resolveCurrentStage({ dashboardDraftPreview, preview, queryResult, uploadResult });
   const currentStageIndex = wizardStages.findIndex((stage) => stage.id === currentStage);
@@ -119,6 +130,7 @@ export function useIngestionWizard({
     uploadPollToken.current += 1;
     setSelectedFile(file);
     setUploadResult(null);
+    setQualityReport(null);
     setError(null);
     setSuccessMessage(null);
 
@@ -152,6 +164,7 @@ export function useIngestionWizard({
 
     setError(null);
     setSuccessMessage(null);
+    setQualityReport(null);
     setUploading(true);
 
     try {
@@ -162,7 +175,7 @@ export function useIngestionWizard({
       });
       setUploadResult(result);
       onStatusChange?.(`Upload accepted: ${result.dataset_name}`);
-      setSuccessMessage(`Upload accepted. Profiling is ${result.current_step ?? result.status}.`);
+      setSuccessMessage(`Upload accepted. Cleaning is ${result.current_step ?? result.status}.`);
       const pollToken = uploadPollToken.current + 1;
       uploadPollToken.current = pollToken;
       void pollUploadJob(result, pollToken);
@@ -323,11 +336,15 @@ export function useIngestionWizard({
         setUploadResult(latestResult);
 
         if (job.status === 'completed' && job.dataset_id) {
-          const refreshedDatasets = await listWorkspaceDatasets(apiBase, userEmail, workspaceId);
+          const [refreshedDatasets, report] = await Promise.all([
+            listWorkspaceDatasets(apiBase, userEmail, workspaceId),
+            getDatasetQualityReport(apiBase, userEmail, job.dataset_id).catch(() => null),
+          ]);
           if (!isCurrentUploadPoll(pollToken)) {
             return;
           }
           setDatasets(refreshedDatasets);
+          setQualityReport(report);
           setSelectedDatasetId(String(job.dataset_id));
           void getWorkspaceSummary(apiBase, userEmail, workspaceId)
             .then((summary) => {
@@ -337,8 +354,8 @@ export function useIngestionWizard({
             })
             .catch(() => undefined);
           onPrepareDashboard?.(latestResult.dataset_name);
-          onStatusChange?.(`Dataset profiled: ${latestResult.dataset_name}`);
-          setSuccessMessage(`Profile complete for ${latestResult.dataset_name}.`);
+          onStatusChange?.(`Dataset cleaned and profiled: ${latestResult.dataset_name}`);
+          setSuccessMessage(`Cleaning and profiling complete for ${latestResult.dataset_name}.`);
           return;
         }
 
@@ -380,6 +397,7 @@ export function useIngestionWizard({
     nextStage,
     preview,
     progressPercent: ((currentStageIndex + 1) / wizardStages.length) * 100,
+    qualityReport,
     queryLoading,
     queryResult,
     querySql,

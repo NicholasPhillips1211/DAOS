@@ -2,7 +2,7 @@
 
 Review date: 2026-06-05
 
-DAOS is currently a FastAPI + React scaffold for an AI-Powered Management Information Operating System with good route/service separation, a working local workflow for CSV ingestion, profiling, SQL querying, dashboard creation, collaboration, automation planning, metadata events, and governance audit events. The product direction in this repository is strongest when it stays centered on the management information lifecycle:
+DAOS is currently a FastAPI + React scaffold for an AI-Powered Management Information Operating System with good route/service separation, a working local workflow for CSV ingestion, cleaning, profiling, SQL querying, dashboard creation, collaboration, automation planning, metadata events, and governance audit events. The product direction in this repository is strongest when it stays centered on the management information lifecycle:
 
 Information Collection -> Information Governance -> Information Analysis -> Information Intelligence -> Information Operationalization.
 
@@ -62,34 +62,35 @@ The root frontend app is now a shell:
 
 ## Workflow Review
 
-### Ingestion And Profiling
+### Ingestion, Cleaning, And Profiling
 
 Implemented flow:
 
-- `POST /api/v1/ingestion/upload` validates workspace access through RBAC, then delegates the ingestion lifecycle to `IngestionWorkflowService`.
-- `IngestionWorkflowService` creates a durable `IngestionJob`, streams the uploaded CSV to workspace-scoped raw storage, profiles it through `QualityService`, creates `Dataset` and `DataQualityReport` records, and transitions the job to `completed` or `failed`.
+- `POST /api/v1/ingestion/upload` validates workspace access through RBAC, persists the raw file, and queues cleaning/profiling work through `WorkItem`.
+- `IngestionWorkflowService` creates a durable `IngestionJob`, streams the uploaded CSV to workspace-scoped raw storage, creates cleaned and rejected-row CSV artifacts through DuckDB-backed `QualityService`, profiles raw versus cleaned quality, creates `Dataset` and `DataQualityReport` records, and transitions the job to `completed` or `failed`.
+- The `Dataset` record points to the cleaned artifact, while the ingestion job and quality metadata preserve the raw, cleaned, and rejected artifact paths for auditability.
 - `GET /api/v1/ingestion/jobs` and `GET /api/v1/ingestion/jobs/{job_id}` expose job state after enforcing workspace access.
-- Successful and failed ingestion attempts emit audit and metadata events, including the ingestion job id.
+- Successful ingestion emits audit and metadata events, including the ingestion job id, cleaning summary, raw-vs-clean quality delta, artifact fingerprints, schema snapshot, usage records, and raw-to-clean lineage.
 - Tests cover successful upload, missing workspace, non-CSV rejection, blank dataset name rejection, quality report retrieval, queryability, job state retrieval, failure state recording, and RBAC on job access.
 
 Gaps:
 
 - Only CSV is supported.
-- Ingestion is still synchronous and request-bound; the job lifecycle is durable, but processing is not yet handed off to a worker.
-- Retry handling exists for file and DB writes, but retries are still in-process and not yet backed by durable worker retry state.
+- Cleaning policy is fixed; analyst preview, rule configuration, rejected-row review/download UX, and promotion approval are not implemented yet.
+- Retry handling exists for file and DB writes, while production-scale resumable checkpoints still need to be added.
 
 ### Information Governance Metadata
 
 Implemented flow:
 
 - `Dataset` records are created during ingestion.
-- Quality profile metadata is stored in the quality report JSON.
+- Cleaning and quality profile metadata are stored in the quality report JSON.
 - `MetadataService` emits metadata-prefixed events into the shared audit-event table.
 - `GET /api/v1/metadata/events` can query metadata events.
 - `MetadataRepository` provides first-class persistence boundaries for schema, lineage, usage, and AI context records.
 - `GET /api/v1/metadata/schemas`, `/lineage`, `/usage`, and `/ai-context` expose lifecycle metadata with workspace RBAC.
 - `POST /api/v1/metadata/ai-context/build` creates reusable workspace context from the full management information lifecycle.
-- Successful ingestion records a dataset schema snapshot, ingestion-job-to-dataset lineage, collection usage, and dataset-profile AI context.
+- Successful ingestion records a dataset schema snapshot, ingestion-job-to-dataset lineage, raw-to-clean lineage, collection and cleaning usage, and dataset-profile AI context.
 
 Gaps:
 
@@ -102,7 +103,7 @@ Gaps:
 Implemented flow:
 
 - Dataset query endpoints can run SQL against uploaded datasets.
-- Tests cover querying uploaded CSV data through lakehouse and dataset query routes.
+- Tests cover querying cleaned uploaded CSV data through lakehouse and dataset query routes.
 - Dataset statistics can be generated for uploaded CSV files.
 - Dataset and lakehouse query execution now records query execution history, row/column counts, duration, metadata usage, and dataset-to-query lineage.
 - `GET /api/v1/analytics/query-executions` exposes workspace-scoped query history.
@@ -178,7 +179,7 @@ The classification is useful, but several workflow services are still thin. The 
 | --- | ---: | --- |
 | `frontend/src/features/ingestion/hooks/useIngestionWizard.ts` | 357 | Owns the full ingestion workflow state; easier to read than the prior monolith, but still the next frontend simplification target. |
 | `backend/app/services/automation_service.py` | 454 | Largest backend service; mixes provider calling, fallback generation, execution, and persistence formatting. |
-| `backend/app/services/ingestion_workflow_service.py` | 427 | Canonical ingestion workflow; owns job state, streaming file persistence, profiling, audit, and metadata emission. Should be split once worker handoff is introduced. |
+| `backend/app/services/ingestion_workflow_service.py` | 427+ | Canonical ingestion workflow; owns job state, streaming file persistence, cleaning, profiling, audit, and metadata emission. Should be split as cleaning policy and artifact lifecycle rules deepen. |
 | `frontend/src/HomeView.tsx` | 199 | Data-driven presentational component; lower risk than workflow-heavy files. |
 | `frontend/src/features/workspace/hooks/useDashboardWorkflow.ts` | 163 | Focused dashboard orchestration; acceptable size but should gain tests before deeper dashboard operationalization. |
 | `frontend/src/GuidedTour.tsx` | 138 | Extracted helper logic and cleaned UI copy; needs visual smoke coverage rather than more splitting. |
@@ -197,7 +198,7 @@ The classification is useful, but several workflow services are still thin. The 
 ## Architecture Risks
 
 - Metadata is now a first-class core, but it is still early and does not yet cover dataset ownership, dashboard health, or freshness.
-- Ingestion is synchronous and CSV-only; upload persistence is streamed, but processing still happens inside the request path.
+- Ingestion is async and CSV-only; DuckDB now owns worker-side CSV cleaning/profiling, but resumable checkpoints and policy controls still need production depth.
 - SQL analytics has query history and source-dataset lineage; multi-dataset lineage remains future work.
 - AI has a reusable metadata-grounded context builder, but automation and summaries still need to consume it directly.
 - Dashboards now have dependency and KPI ownership metadata, but still need health, alert readiness, and AI summaries.
@@ -206,7 +207,7 @@ The classification is useful, but several workflow services are still thin. The 
 
 ## Next Implementation Priorities
 
-1. Move canonical ingestion work out of the request path through a worker/job runner and durable retry state.
+1. Deepen ingestion cleaning with configurable policies, rejected-row review/download UX, and analyst preview/approval before promotion.
 2. Add focused frontend tests for the split ingestion wizard and then continue simplifying `useIngestionWizard.ts` into smaller data-loading, upload, query, and dashboard-draft hooks.
 3. Complete Information Governance metadata with ownership, stewardship, classification, freshness, and migration coverage.
 4. Strengthen Information Analysis with saved-query-to-dashboard dependencies, repeatable result persistence, and richer SQL lineage as connector support expands.

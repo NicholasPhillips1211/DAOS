@@ -13,6 +13,9 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.workflow_jobs import INGESTION_CLEAN_PROFILE_JOB
+from app.core.workflow_status import WorkflowStatus
 from app.models.ingestion import DataQualityReport, IngestionJob
 from app.models.metadata import Dataset, DatasetState
 from app.services.audit_service import AuditService
@@ -31,6 +34,8 @@ class IngestionWorkflowResult:
     job: IngestionJob
     report: DataQualityReport
     storage_path: Path
+    raw_storage_path: Path
+    rejected_storage_path: Path
     profile: dict[str, Any]
 
 
@@ -71,7 +76,7 @@ class IngestionWorkflowService:
         file_stream: BinaryIO,
         actor: str,
     ) -> QueuedIngestionUpload:
-        """Persist an upload and enqueue profiling/registration for a worker."""
+        """Persist an upload and enqueue cleaning, profiling, and registration for a worker."""
 
         source_name = self._safe_source_name(file_name, dataset_name)
         job: IngestionJob | None = None
@@ -88,8 +93,8 @@ class IngestionWorkflowService:
             )
             storage_path = self.persist_file(raw_storage_root, workspace_id, source_name, file_stream)
             job.storage_path = str(storage_path)
-            job.status = "queued"
-            job.current_step = "queued_for_profiling"
+            job.status = WorkflowStatus.queued.value
+            job.current_step = "queued_for_cleaning"
             job.progress_percent = 15
             db.add(job)
             db.commit()
@@ -98,7 +103,7 @@ class IngestionWorkflowService:
             work_item = self.work_queue_service.enqueue(
                 db,
                 workspace_id=workspace_id,
-                job_type="ingestion.profile",
+                job_type=INGESTION_CLEAN_PROFILE_JOB,
                 priority=50,
                 payload={"ingestion_job_id": job.id},
             )
@@ -113,7 +118,7 @@ class IngestionWorkflowService:
                 actor=actor,
                 resource_type="ingestion_job",
                 resource_id=job.id,
-                details=f"Queued {source_name} for profiling",
+                details=f"Queued {source_name} for cleaning and profiling",
                 db=db,
             )
             return QueuedIngestionUpload(job=job, work_item_id=work_item.id)
@@ -159,6 +164,8 @@ class IngestionWorkflowService:
         db: Session,
         *,
         raw_storage_root: Path,
+        clean_storage_root: Path | None = None,
+        rejected_storage_root: Path | None = None,
         workspace_id: int,
         dataset_name: str,
         file_name: str | None,
@@ -175,7 +182,7 @@ class IngestionWorkflowService:
             dataset_name=dataset_name.strip(),
             source_name=source_name,
             actor=actor,
-            status="running",
+            status=WorkflowStatus.running.value,
             current_step="persisting_file",
             progress_percent=10,
         )
@@ -190,9 +197,11 @@ class IngestionWorkflowService:
             workspace_id=workspace_id,
             dataset_name=dataset_name.strip(),
             source_name=source_name,
-            storage_path=storage_path,
+            raw_storage_path=storage_path,
+            clean_storage_root=clean_storage_root,
+            rejected_storage_root=rejected_storage_root,
         )
-        self.emit_success_events(db, result, actor=actor)
+        self.emit_success_events_best_effort(db, result, actor=actor)
         return result
 
     def validate_dataset_name(self, dataset_name: str) -> None:
@@ -217,7 +226,7 @@ class IngestionWorkflowService:
         dataset_name: str,
         source_name: str,
         actor: str | None,
-        status: str = "staging",
+        status: str = WorkflowStatus.staging.value,
         current_step: str = "persisting_file",
         progress_percent: int = 5,
     ) -> IngestionJob:
@@ -235,15 +244,22 @@ class IngestionWorkflowService:
             rejected_rows=0,
             quality_score=0,
             actor=actor,
-            started_at=datetime.now(timezone.utc) if status == "running" else None,
+            started_at=datetime.now(timezone.utc) if status == WorkflowStatus.running.value else None,
         )
         db.add(job)
         db.commit()
         db.refresh(job)
         return job
 
-    def process_queued_job(self, db: Session, *, job_id: int) -> IngestionWorkflowResult:
-        """Run the worker-side profiling and registration path for a queued upload."""
+    def process_queued_job(
+        self,
+        db: Session,
+        *,
+        job_id: int,
+        clean_storage_root: Path | None = None,
+        rejected_storage_root: Path | None = None,
+    ) -> IngestionWorkflowResult:
+        """Run the worker-side cleaning, profiling, and registration path for a queued upload."""
 
         job = db.get(IngestionJob, job_id)
         if job is None:
@@ -257,17 +273,17 @@ class IngestionWorkflowService:
             raise ValueError(f"Ingestion job {job_id} has no dataset name")
 
         try:
-            self.mark_job_running(db, job, step="profiling_dataset", progress_percent=35)
+            self.mark_job_running(db, job, step="cleaning_dataset", progress_percent=35)
             result = self.complete_job_with_profile(
                 db,
                 job=job,
                 workspace_id=job.workspace_id,
                 dataset_name=job.dataset_name,
                 source_name=job.source_name,
-                storage_path=Path(job.storage_path),
+                raw_storage_path=Path(job.storage_path),
+                clean_storage_root=clean_storage_root,
+                rejected_storage_root=rejected_storage_root,
             )
-            self.emit_success_events(db, result, actor=job.actor or "worker")
-            return result
         except HTTPException as exc:
             self.mark_job_failed(db, job, self._http_error_message(exc))
             self.emit_failure_events(
@@ -290,11 +306,13 @@ class IngestionWorkflowService:
                 error_message=message,
             )
             raise
+        self.emit_success_events_best_effort(db, result, actor=job.actor or "worker")
+        return result
 
     def mark_job_running(self, db: Session, job: IngestionJob, *, step: str, progress_percent: int) -> None:
         """Move a queued job into an active worker step."""
 
-        job.status = "running"
+        job.status = WorkflowStatus.running.value
         job.current_step = step
         job.progress_percent = progress_percent
         job.started_at = job.started_at or datetime.now(timezone.utc)
@@ -347,16 +365,37 @@ class IngestionWorkflowService:
         workspace_id: int,
         dataset_name: str,
         source_name: str,
-        storage_path: Path,
+        raw_storage_path: Path,
+        clean_storage_root: Path | None = None,
+        rejected_storage_root: Path | None = None,
     ) -> IngestionWorkflowResult:
-        """Profile a persisted file and atomically create the success records."""
+        """Clean/profile a persisted file and atomically create the success records."""
 
         existing_result = self._completed_job_result(db, job)
         if existing_result is not None:
             return existing_result
 
-        profile = self.quality_service.profile_csv(storage_path)
-        profile["metadata"] = self._build_profile_metadata(profile, source_name, storage_path, job.id)
+        cleaned_storage_path = self.cleaned_storage_path(clean_storage_root, workspace_id, source_name)
+        rejected_storage_path = self.rejected_storage_path(rejected_storage_root, workspace_id, source_name)
+
+        # The raw artifact is profiled before cleaning so analysts can see what
+        # changed, while the registered Dataset always points at the cleaned
+        # artifact used by query, dashboard, ML, and automation workflows.
+        raw_profile = self.quality_service.profile_csv(raw_storage_path)
+        cleaning_summary = self.quality_service.clean_csv(raw_storage_path, cleaned_storage_path, rejected_storage_path)
+        profile = self.quality_service.profile_csv(cleaned_storage_path)
+        profile["rejected_rows"] = cleaning_summary["rejected_row_count"]
+        profile["cleaning"] = cleaning_summary
+        profile["raw_profile"] = raw_profile
+        profile["quality_delta"] = self.quality_service.compare_profiles(raw_profile, profile, cleaning_summary)
+        profile["metadata"] = self._build_profile_metadata(
+            profile,
+            source_name,
+            cleaned_storage_path,
+            raw_storage_path,
+            rejected_storage_path,
+            job.id,
+        )
 
         for attempt in range(1, self._max_db_attempts + 1):
             try:
@@ -364,8 +403,8 @@ class IngestionWorkflowService:
                     workspace_id=workspace_id,
                     name=dataset_name,
                     source_type="file",
-                    state=DatasetState.raw,
-                    storage_path=str(storage_path),
+                    state=DatasetState.cleansed,
+                    storage_path=str(cleaned_storage_path),
                 )
                 db.add(dataset)
                 db.flush()
@@ -375,11 +414,11 @@ class IngestionWorkflowService:
                     summary_json=self.quality_service.render_summary_json(profile),
                 )
                 job.dataset_id = dataset.id
-                job.status = "completed"
-                job.current_step = "profile_complete"
+                job.status = WorkflowStatus.completed.value
+                job.current_step = "cleaned_and_profiled"
                 job.progress_percent = 100
                 job.row_count = profile["row_count"]
-                job.rejected_rows = profile["rejected_rows"]
+                job.rejected_rows = cleaning_summary["rejected_row_count"]
                 job.quality_score = profile["quality_score"]
                 job.error_message = None
                 job.finished_at = datetime.now(timezone.utc)
@@ -394,7 +433,9 @@ class IngestionWorkflowService:
                     dataset=dataset,
                     job=job,
                     report=report,
-                    storage_path=storage_path,
+                    storage_path=cleaned_storage_path,
+                    raw_storage_path=raw_storage_path,
+                    rejected_storage_path=rejected_storage_path,
                     profile=profile,
                 )
             except SQLAlchemyError as exc:
@@ -428,7 +469,7 @@ class IngestionWorkflowService:
             dataset_name=dataset_name.strip() or None,
             source_name=source_name,
             source_type="file",
-            status="failed",
+            status=WorkflowStatus.failed.value,
             current_step="validation_failed",
             progress_percent=100,
             row_count=0,
@@ -446,8 +487,8 @@ class IngestionWorkflowService:
     def mark_job_failed(self, db: Session, job: IngestionJob, error_message: str) -> None:
         """Persist a failed terminal state for a started ingestion job."""
 
-        job.status = "failed"
-        job.current_step = "failed"
+        job.status = WorkflowStatus.failed.value
+        job.current_step = WorkflowStatus.failed.value
         job.progress_percent = 100
         job.error_message = error_message
         job.finished_at = datetime.now(timezone.utc)
@@ -506,6 +547,19 @@ class IngestionWorkflowService:
             profile=result.profile,
         )
 
+    def emit_success_events_best_effort(self, db: Session, result: IngestionWorkflowResult, *, actor: str) -> None:
+        """Emit success events without corrupting the committed ingestion result."""
+
+        try:
+            self.emit_success_events(db, result, actor=actor)
+        except Exception as exc:
+            logger.warning(
+                "ingestion_success_event_emit_failed job_id=%s dataset_id=%s error=%s",
+                result.job.id,
+                result.dataset.id,
+                str(exc),
+            )
+
     def emit_failure_events(
         self,
         db: Session,
@@ -553,7 +607,9 @@ class IngestionWorkflowService:
         self,
         profile: dict[str, Any],
         source_name: str,
-        storage_path: Path,
+        cleaned_storage_path: Path,
+        raw_storage_path: Path,
+        rejected_storage_path: Path,
         job_id: int,
     ) -> dict[str, Any]:
         """Attach operational metadata used by downstream lineage and AI workflows."""
@@ -568,22 +624,40 @@ class IngestionWorkflowService:
             "quality_score": profile.get("quality_score", 0),
             "schema": schema,
             "issues": profile.get("issues", []),
+            "quality_delta": profile.get("quality_delta", {}),
+            "cleaning": profile.get("cleaning", {}),
         }
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_source, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
         return {
-            "profile_version": "1.2",
+            "profile_version": "1.4",
             "ingestion_job_id": job_id,
             "ingested_at": datetime.now(timezone.utc).isoformat(),
             "source_name": source_name,
-            "storage_path": str(storage_path),
+            "storage_path": str(cleaned_storage_path),
+            "raw_storage_path": str(raw_storage_path),
+            "cleaned_storage_path": str(cleaned_storage_path),
+            "rejected_storage_path": str(rejected_storage_path),
+            "cleaning": profile.get("cleaning", {}),
+            "quality_delta": profile.get("quality_delta", {}),
+            "raw_profile": profile.get("raw_profile", {}),
             "column_count": len(schema),
             "issue_count": len(profile.get("issues", [])),
             "schema": schema,
             "profile_fingerprint": fingerprint,
         }
+
+    @staticmethod
+    def cleaned_storage_path(clean_storage_root: Path | None, workspace_id: int, source_name: str) -> Path:
+        root = clean_storage_root or Path(settings.clean_storage_root)
+        return root / f"ws{workspace_id}_{Path(source_name).stem}_cleaned.csv"
+
+    @staticmethod
+    def rejected_storage_path(rejected_storage_root: Path | None, workspace_id: int, source_name: str) -> Path:
+        root = rejected_storage_root or Path(settings.rejected_storage_root)
+        return root / f"ws{workspace_id}_{Path(source_name).stem}_rejected.csv"
 
     @staticmethod
     def _safe_source_name(file_name: str | None, dataset_name: str) -> str:
@@ -618,16 +692,20 @@ class IngestionWorkflowService:
         if report is None:
             raise ValueError(f"Ingestion job {job.id} references dataset {dataset.id} without a quality report")
 
-        storage_path = job.storage_path or dataset.storage_path
+        storage_path = dataset.storage_path or job.storage_path
         if not storage_path:
             raise ValueError(f"Ingestion job {job.id} completed without a storage path")
+        profile = self._profile_from_report(report)
+        metadata = profile.get("metadata", {}) if isinstance(profile.get("metadata", {}), dict) else {}
 
         return IngestionWorkflowResult(
             dataset=dataset,
             job=job,
             report=report,
             storage_path=Path(storage_path),
-            profile=self._profile_from_report(report),
+            raw_storage_path=Path(metadata.get("raw_storage_path") or job.storage_path or storage_path),
+            rejected_storage_path=Path(metadata.get("rejected_storage_path") or storage_path),
+            profile=profile,
         )
 
     @staticmethod

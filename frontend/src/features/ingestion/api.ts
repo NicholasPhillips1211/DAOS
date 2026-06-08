@@ -1,4 +1,10 @@
-import { DatasetRecord, IngestionJobRead, IngestionUploadRead, QueryResult } from '../../types/domain';
+import {
+  DataQualityReportRead,
+  DatasetRecord,
+  IngestionJobRead,
+  IngestionUploadRead,
+  QueryResult,
+} from '../../types/domain';
 import { assertOk, buildApiHeaders } from '../../lib/http';
 
 /**
@@ -18,7 +24,7 @@ export async function listWorkspaceDatasets(
 }
 
 /**
- * Upload CSV content and trigger profiling so the UI can continue into query/dashboards.
+ * Upload CSV content and trigger cleaning/profiling so the UI can continue into query/dashboards.
  */
 export async function uploadDatasetFile(
   apiBase: string,
@@ -40,7 +46,7 @@ export async function uploadDatasetFile(
 }
 
 /**
- * Fetch the durable ingestion job so the UI can follow async profiling.
+ * Fetch the durable ingestion job so the UI can follow async cleaning/profiling.
  */
 export async function getIngestionJob(
   apiBase: string,
@@ -52,6 +58,21 @@ export async function getIngestionJob(
   });
   assertOk(response, 'Ingestion job lookup failed');
   return (await response.json()) as IngestionJobRead;
+}
+
+/**
+ * Fetch the stored quality report so analysts can see cleaning and profiling evidence.
+ */
+export async function getDatasetQualityReport(
+  apiBase: string,
+  userEmail: string,
+  datasetId: number,
+): Promise<DataQualityReportRead> {
+  const response = await fetch(`${apiBase}/datasets/${datasetId}/quality`, {
+    headers: buildApiHeaders(userEmail, false),
+  });
+  assertOk(response, 'Quality report lookup failed');
+  return (await response.json()) as DataQualityReportRead;
 }
 
 /**

@@ -74,7 +74,7 @@ async def upload_dataset(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> IngestionUploadRead:
-    """Upload a dataset and queue profiling/registration for a worker."""
+    """Upload a dataset and queue cleaning, profiling, and registration for a worker."""
 
     require_workspace_role(db, workspace_id, principal, WORKSPACE_WRITE_ROLES)
 

@@ -1,5 +1,6 @@
 import type {
   DashboardDraftPreview,
+  DataQualityReportRead,
   DatasetRecord,
   IngestionUploadRead,
   QueryResult,
@@ -57,6 +58,7 @@ export type IngestionWizardState = {
   nextStage: WizardStageConfig;
   preview: PreviewSummary;
   progressPercent: number;
+  qualityReport: DataQualityReportRead | null;
   queryLoading: boolean;
   queryResult: QueryResult | null;
   querySql: string;

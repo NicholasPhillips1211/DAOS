@@ -40,6 +40,8 @@ def test_ingestion_emits_queryable_metadata_event(client, complete_upload) -> No
     assert event["details"]["row_count"] == 2
     assert event["details"]["quality_score"] == 100
     assert event["details"]["status"] == "completed"
+    assert event["details"]["cleaning"]["engine"] == "duckdb"
+    assert event["details"]["artifact_fingerprints"]["cleaned"]
 
 
 def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload) -> None:
@@ -78,13 +80,23 @@ def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload)
         params={"workspace_id": workspace_id, "asset_type": "dataset", "asset_id": dataset_id},
     )
     assert lineage_response.status_code == 200
-    lineage_record = lineage_response.json()[0]
+    lineage_records = lineage_response.json()
+    lineage_record = next(record for record in lineage_records if record["relation_type"] == "created_dataset")
     assert lineage_record["upstream_type"] == "ingestion_job"
     assert lineage_record["upstream_id"] == job_id
     assert lineage_record["downstream_type"] == "dataset"
     assert lineage_record["downstream_id"] == dataset_id
     assert lineage_record["relation_type"] == "created_dataset"
     assert lineage_record["details"]["dataset_name"] == "sales"
+    cleaning_lineage = next(record for record in lineage_records if record["relation_type"] == "cleaned_into_dataset")
+    assert cleaning_lineage["upstream_type"] == "raw_file"
+    assert cleaning_lineage["upstream_id"] == job_id
+    assert cleaning_lineage["downstream_type"] == "dataset"
+    assert cleaning_lineage["downstream_id"] == dataset_id
+    assert cleaning_lineage["details"]["cleaning"]["cleaned_row_count"] == 2
+    assert cleaning_lineage["details"]["cleaning"]["engine"] == "duckdb"
+    assert cleaning_lineage["details"]["quality_delta"]["score_delta"] == 0
+    assert cleaning_lineage["details"]["rejected_storage_path"].endswith("_rejected.csv")
 
     usage_response = client.get(
         "/api/v1/metadata/usage",
@@ -99,6 +111,23 @@ def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload)
     usage_record = usage_response.json()[0]
     assert usage_record["details"]["job_id"] == job_id
     assert usage_record["details"]["quality_score"] == 100
+    assert usage_record["details"]["cleaned_storage_path"].endswith("_cleaned.csv")
+
+    cleaning_usage_response = client.get(
+        "/api/v1/metadata/usage",
+        params={
+            "workspace_id": workspace_id,
+            "asset_type": "dataset",
+            "asset_id": dataset_id,
+            "action": "information_cleaned",
+        },
+    )
+    assert cleaning_usage_response.status_code == 200
+    cleaning_usage = cleaning_usage_response.json()[0]
+    assert cleaning_usage["details"]["cleaning"]["raw_row_count"] == 2
+    assert cleaning_usage["details"]["cleaned_storage_path"].endswith("_cleaned.csv")
+    assert cleaning_usage["details"]["rejected_storage_path"].endswith("_rejected.csv")
+    assert cleaning_usage["details"]["artifact_fingerprints"]["policy"]
 
     ownership_response = client.get(
         "/api/v1/metadata/ownership",
@@ -127,6 +156,8 @@ def test_ingestion_registers_lifecycle_metadata_records(client, complete_upload)
     assert ai_context["dataset_name"] == "sales"
     assert ai_context["quality_score"] == 100
     assert ai_context["schema"][0]["name"] == "id"
+    assert ai_context["cleaning"]["cleaned_row_count"] == 2
+    assert ai_context["quality_delta"]["cleaned_quality_score"] == 100
 
 
 def test_query_dashboard_and_automation_emit_lifecycle_metadata(client, complete_upload) -> None:
